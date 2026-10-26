@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>咖啡自动机实验</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+.l7-panels { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: .6rem 0; }
+.l7-panels figure { margin: 0; }
+.l7-panels canvas { width: 11rem; height: 11rem; image-rendering: pixelated; border: 1px solid var(--rule); display: block; }
+.l7-panels figcaption { font-family: var(--sans); font-size: .8rem; color: var(--muted); margin-top: .3rem; }
+.h-svg .l7-fine { stroke: var(--muted); }
+.l7-key { display: inline-block; width: 1.2rem; height: 0; border-top: 2px solid var(--accent); vertical-align: middle; margin-right: .3rem; }
+.l7-key.l7-fine-key { border-top-color: var(--muted); }
+.grid5 td { font-family: var(--mono); width: 2rem; padding: .25rem; border: 1px solid var(--rule); }
+.grid5 td.hl { background: var(--accent-soft); }
+.grid5 td.c { outline: 2px solid var(--accent); outline-offset: -2px; }
+.recap td, .recap th { text-align: left; vertical-align: top; }
+</style>
+</head>
+<body>
+<main>
+
+<p class="kicker">第 7 课 · 复杂动力学第一定律</p>
+<h1>咖啡自动机：让复杂度先升后降</h1>
+<p class="subtitle">粗粒化加压缩长度，复现 Aaronson、Carroll、Ouellette 2014 年的实验，再拿它检验 notebook 的连续扩散</p>
+
+<p>notebook 的总结图写着「熵永遠增加；複雜度先升後降」，但前面几课已经看到，它用来画图的两个度量（单格熵、转换次数）都撑不起这句话。Aaronson 自己也知道博客里只是猜想。三年后，他和 Sean Carroll、Lauren Ouellette 写了一篇论文，第一次把这个猜想做成可以跑的实验<sup class="cite"><a href="#src1">[1]</a></sup>。用的度量叫<strong>表观复杂度</strong>（apparent complexity）：先把状态「抹模糊」，去掉随机细节，再看剩下的东西有多难描述<sup class="cite"><a href="#src1">[1, §2.1]</a></sup>。</p>
+
+<div class="box plain"><p style="text-align:center; margin:0">表观复杂度 = <span class="mono">K(f(x))</span> ≈ <span class="mono">gzip(粗粒化并分档后的 x)</span> 的字节数　　熵 ≈ <span class="mono">gzip(x)</span> 的字节数</p></div>
+
+<p class="win"><strong>本课收获：</strong>你能自己写出咖啡自动机，用 <code>F.avg_pool2d</code> 做粗粒化，跑出「熵一路升、表观复杂度先升后降」的两条曲线；能推导窗口要多大才能压住随机噪声；还能说清 notebook 的连续扩散为什么连「熵」都会先升后降。</p>
+
+<h2>1　论文的实验设置</h2>
+
+<p>状态是一个 n×n 的 0/1 数组，1 是奶油，0 是咖啡。初态上半全是 1，下半全是 0<sup class="cite"><a href="#src1">[1, §3]</a></sup>。论文比较了两种演化规则：</p>
+
+<table class="recap">
+<tr><th>模型</th><th>规则</th><th>特点</th></tr>
+<tr><td>交互模型</td><td>每一步随机选一对上下或左右相邻、取值不同的格子，交换它们</td><td>一格只能放一个粒子，粒子互相挡路</td></tr>
+<tr><td>非交互模型</td><td>每一步每个奶油粒子各自往随机方向走一格，一格可以叠很多粒子</td><td>每个粒子独立做随机游走，容易做理论分析</td></tr>
+</table>
+
+<p>度量分两步<sup class="cite"><a href="#src1">[1, §5.1]</a></sup>：</p>
+<ol>
+<li><strong>粗粒化</strong>：每一格换成以它为中心的 g×g 窗口的平均值（g 叫 grain size）。窗口伸出边界时，只平均落在数组里的格子。</li>
+<li><strong>分档</strong>：把平均值分成三档，接近 0 是「咖啡」，接近 1 是「奶油」，接近 0.5 是「混合」。分档后的数组用 gzip 压缩，字节数就是复杂度的估计；原始细粒度数组的压缩字节数是熵的估计。</li>
+</ol>
+
+<p>论文里能看出几次尝试：他们先试过 OSCR 算法和「粗粒化 + 差分」的两段式编码，都因为噪声或伪影放弃了，最后才用上面这种最直接的做法<sup class="cite"><a href="#src1">[1, §4]</a></sup>。</p>
+
+<div class="exercise">
+<h3>练习 A：手算两个粗粒化值</h3>
+<p>下面是论文图 1 的 5×5 例子，g = 3。先算 <strong>(1, 1)</strong> 格（第 1 行第 1 列，从 0 数，红框）的窗口平均，浅色是它的窗口。</p>
+<table class="grid5">
+<tr><td class="hl">0</td><td class="hl">1</td><td class="hl">0</td><td>0</td><td>1</td></tr>
+<tr><td class="hl">0</td><td class="hl c">1</td><td class="hl">1</td><td>0</td><td>1</td></tr>
+<tr><td class="hl">0</td><td class="hl">1</td><td class="hl">0</td><td>1</td><td>0</td></tr>
+<tr><td>1</td><td>0</td><td>1</td><td>1</td><td>1</td></tr>
+<tr><td>1</td><td>0</td><td>1</td><td>0</td><td>0</td></tr>
+</table>
+<div class="l7-num" data-answer="0.4444" data-tol="0.005" data-placeholder="(1,1) 的平均 = ?"
+  data-hint="数一数浅色 9 格里有几个 1。"
+  data-explain="9 格里有 4 个 1，平均 4/9 ≈ 0.444，落在中间档「混合」。"></div>
+<p style="margin-top:1rem">再算左上角 <strong>(0, 0)</strong> 格。它的 3×3 窗口有一部分伸到数组外面。</p>
+<div class="l7-num" data-answer="0.5" data-tol="0.005" data-placeholder="(0,0) 的平均 = ?"
+  data-hint="伸出去的格子不算，只平均落在数组里的那几格。"
+  data-explain="窗口里只有 4 格在数组内：0、1、0、1，平均 2/4 = 0.5。论文图 1 左上角也是 0.5。如果把外面当成 0 来平均，会得到 2/9，这就是 count_include_pad 的区别。"></div>
+</div>
+
+<h2>2　亲手跑一次</h2>
+
+<p>下面的模拟在你的浏览器里实时运行：n = 48，交互模型，每 25 万步量一次。压缩用浏览器自带的 deflate，与 gzip、Python 的 <code>zlib</code> 是同一种算法。点「开始」，几秒钟就能跑完 600 万步。</p>
+
+<div class="l7-sim" data-n="48" data-total="6000000"></div>
+
+<p>有一处实现细节和论文不同：论文每一步从「取值不同的相邻对」里均匀挑一对，我的写法是随机挑一个格子和一个方向，两边相同或撞到杯壁就作废。每一对相邻格子都正好对应两个（格子, 方向）组合，所以只看真正发生的交换，挑中每一对的概率仍然相等，和论文的规则一样，只是有些步数空转掉了。曲线形状不受影响，只是时间轴被拉长了。</p>
+
+<p>我用纯 Python 跑了同样的设置（n = 48，窗口 9×9，三档，<code>zlib</code> 第 9 级，随机种子 0）。结果是：</p>
+
+<table>
+<tr><th class="l">步数</th><td>0</td><td>25 万</td><td>50 万</td><td>100 万</td><td>150 万</td><td>200 万</td><td>300 万</td><td>600 万</td></tr>
+<tr><th class="l">熵（细粒度，字节）</th><td>27</td><td>283</td><td>363</td><td>399</td><td>419</td><td>425</td><td>430</td><td>428</td></tr>
+<tr><th class="l">表观复杂度（字节）</th><td>31</td><td>82</td><td>114</td><td>194</td><td><strong>219</strong></td><td>114</td><td>62</td><td>38</td></tr>
+</table>
+
+<p>熵一路上升，最后停在 430 字节左右，和一张完全随机的 48×48 0/1 数组压缩后的大小（我试了 5 张，420 到 439 字节）没有区别。复杂度从 31 爬到 219，再回落到 30 上下：250 万步以后都在 27 到 65 之间。换种子 1、2、3 再跑，峰值分别是 204、193、228，出现在 100 万到 125 万步之间，600 万步时回落到 40、28、36。先升后降的形状每次都在。</p>
+
+<p>初态和终态为什么都简单？初态粗粒化后是「上半奶油、下半咖啡，中间一条过渡带」，终态是「整张都是混合」，各用一句话就能说完。中间那段，奶油像手指一样伸进咖啡，粗粒化后三档的边界弯弯曲曲，要逐段描述，压缩不掉。论文还发现，复杂度峰值大致和边长 n 成正比，峰值出现的时间随 n 按二次曲线增长<sup class="cite"><a href="#src1">[1, §5.2]</a></sup>。</p>
+
+<h2>3　推导：窗口要多大才压得住噪声</h2>
+
+<p>在模拟里把窗口改成 3×3 试试：终态的「复杂度」降不下来。原因是完全混合以后，每个窗口里 1 的比例只是<em>平均</em>等于 1/2，实际会上下抖动。抖动一旦越过 1/3 或 2/3，这一格就会被分到「咖啡」或「奶油」档，留下一个噪点，gzip 就得花字节去记它。</p>
+
+<div class="proof">
+<p><strong>设定。</strong>完全混合时，把窗口里的 m = w² 个格子近似看成独立的 Bernoulli(1/2)。总数守恒会带来一点负相关，这里先忽略。</p>
+<p><strong>均值和方差。</strong>窗口平均 <span class="mono">X̄ = (1/m)Σ Xᵢ</span>，<span class="mono">E[X̄] = 1/2</span>，<span class="mono">Var[X̄] = (1/m)·(1/2)(1/2) = 1/(4w²)</span>，标准差 <span class="mono">σ = 1/(2w)</span>。窗口边长每翻一倍，抖动减半。</p>
+<p><strong>出档概率。</strong>中间档是 [1/3, 2/3)，离开它需要 <span class="mono">|X̄ − 1/2| ≥ 1/6</span>，也就是偏离 <span class="mono">(1/6)/σ = w/3</span> 个标准差。由中心极限定理，</p>
+<p style="text-align:center"><span class="mono">P(出档) ≈ 2Φ(−w/3)</span></p>
+<p>其中 Φ 是标准正态的累积分布函数。<span class="qed">∎</span></p>
+</div>
+
+<p>用 Φ(−1) ≈ 0.1587、Φ(−5/3) ≈ 0.0478、Φ(−3) ≈ 0.00135 代入，再和模拟对照。模拟数据取种子 0、600 万步时的终态，只统计窗口完整落在数组内的格子：</p>
+
+<table>
+<tr><th class="l">窗口 w</th><td>1（不粗粒化）</td><td>3</td><td>5</td><td>9</td><td>13</td></tr>
+<tr><th class="l">理论出档概率 2Φ(−w/3)</th><td>—</td><td>31.7%</td><td>9.6%</td><td>0.27%</td><td>≈ 0</td></tr>
+<tr><th class="l">模拟中实际出档比例</th><td>100%</td><td>36.0%</td><td>11.7%</td><td>0.19%</td><td>0</td></tr>
+<tr><th class="l">终态「复杂度」（字节）</th><td>429</td><td>437</td><td>238</td><td>38</td><td>25</td></tr>
+</table>
+
+<p>w = 1 时完全没有粗粒化，「复杂度」就等于熵；w = 3 时噪点太多，终态和熵一样大，先升后降完全看不出来；w = 9 时只剩约 0.2% 的噪点，曲线才回落。作为对照，一整张全是「混合」档的 48×48 数组压缩后是 25 字节。</p>
+
+<p>论文附录给了这个论证的严格版本：用 Chernoff 界控制单个 L×L 块偏离期望的概率，再对全部 n² 个块取并集界。结论是只要 <span class="mono">L ≫ G√(3 ln(2n²))</span>（G 是灰度档数），所有块同时不出错的概率就很高<sup class="cite"><a href="#src1">[1, 附录]</a></sup>。n = 48、G = 3 时右边约等于 15。这个界很保守：实际上 w = 9 已经够用，因为我们只要求噪点很少，不要求一个都没有。</p>
+
+<div class="exercise">
+<h3>练习 B：w = 5 时的出档概率</h3>
+<p>用上面的公式，Φ 值查上面给的三个数。保留 3 位小数。</p>
+<div class="l7-num" data-answer="0.0956" data-tol="0.006" data-placeholder="P(出档) ≈ ?"
+  data-hint="w/3 = 5/3，所以要用 Φ(−5/3)，别忘了乘 2（两侧都会出档）。"
+  data-explain="2Φ(−5/3) ≈ 2 × 0.0478 ≈ 0.096。模拟中实际是 11.7%，略高，部分原因是正态近似低估了离散二项分布的尾部。"></div>
+</div>
+
+<h2>4　论文发现的伪影，以及他们怎么修</h2>
+
+<p>上面的结果有一个漏洞，论文自己指出来了：<strong>分档本身会制造复杂度</strong>。设想粗粒化后是一条从 0 平滑过渡到 1 的渐变，总有一行正好落在两档的分界线上，一点点噪声就会让这一行的格子在两档之间来回跳，画出一条锯齿边（论文图 9）。这些锯齿会被 gzip 当成结构计入<sup class="cite"><a href="#src1">[1, §6.1]</a></sup>。</p>
+
+<p>他们的修正有两步：一是把三档改成七档；二是允许每个格子上下调一档，选让文件最小的调法。精确求解要搜索 2^(n²) 种调法，所以实际用的是近似算法：一个格子如果和所在行的多数值只差一档，就把它改成多数值<sup class="cite"><a href="#src1">[1, §6.1]</a></sup>。</p>
+
+<p>修正后的结果很能说明问题<sup class="cite"><a href="#src1">[1, §6.2]</a></sup>：</p>
+<ul>
+<li><strong>交互模型</strong>：曲线更嘈杂，但先升后降的形状还在。</li>
+<li><strong>非交互模型</strong>：复杂度曲线被压平到很低的水平。附录证明了原因：粒子各自独立随机游走，每一行的期望浓度可以直接算出来，块的实际浓度又以高概率贴近期望，所以粗粒化图像总能用「n 和 t」这么少的信息描述，复杂度永远不会变大。</li>
+</ul>
+
+<p>所以论文的结论比 notebook 谨慎得多：原始方法下非交互模型的「先升后降」是分档伪影；交互模型<em>可能</em>真的有高复杂度的中间态。他们还强调，压缩长度只能给出 K 的<strong>上界</strong>。要证明系统真的变复杂了，需要的是下界，这还是一个开放问题<sup class="cite"><a href="#src1">[1, §7]</a></sup>。</p>
+
+<h2>5　回到 notebook 的连续扩散</h2>
+
+<p>notebook 的「咖啡」不是粒子，而是第 6 课讲的连续扩散：50×50 网格，中间 10×10 的方块浓度为 1，<code>conv2d</code> 加拉普拉斯核，r = 0.2，replicate 边界，每一步结束时 <code>clamp(0, 1)</code>。我用纯 Python 按同样设置跑到 2000 步，同时记下三个量：notebook 的 20 区间 histc 熵、把浓度量化成 256 级后的压缩长度（细粒度「熵」），以及三档量化后的压缩长度（「复杂度」）。</p>
+
+<table>
+<tr><th class="l">t</th><td>0</td><td>10</td><td>30</td><td>50</td><td>100</td><td>200</td><td>500</td><td>1000</td><td>2000</td></tr>
+<tr><th class="l">最大浓度</th><td>1.000</td><td>0.973</td><td>0.718</td><td>0.538</td><td>0.324</td><td>0.179</td><td>0.077</td><td>0.047</td><td>0.040</td></tr>
+<tr><th class="l">histc 熵（bit）</th><td>0.242</td><td>0.791</td><td>1.066</td><td>1.189</td><td>1.313</td><td>1.265</td><td>0.821</td><td>0</td><td>0</td></tr>
+<tr><th class="l">256 级压缩（字节）</th><td>31</td><td>223</td><td>336</td><td>398</td><td>475</td><td>516</td><td>314</td><td>164</td><td>26</td></tr>
+<tr><th class="l">三档压缩（字节）</th><td>31</td><td>54</td><td>62</td><td>44</td><td>25</td><td>25</td><td>25</td><td>25</td><td>25</td></tr>
+</table>
+
+<p>有三点值得注意：</p>
+<ol>
+<li><strong>奶油总量守恒，<code>clamp</code> 从来没起作用。</strong>2000 步里总量一直是 100.0000，没有一个值越过 [0, 1]。原因是新值 <span class="mono">(1 − 4r)·v + r·(四个邻居之和)</span> 在 r ≤ 1/4 时是五个旧值的凸组合，不可能超出旧值的范围。replicate 边界相当于墙，没有流量流出去。终态是均匀的 100/2500 = 0.04。</li>
+<li><strong>notebook 只跑到 t = 50，所以只看到熵在升。</strong>继续跑，histc 熵在 t = 100 时是 1.31，之后开始下降，t = 1000 时降到 0：所有值都低于 0.05，全落进第一个区间。</li>
+<li><strong>连细粒度的压缩长度也先升后降。</strong>这不违反第二定律，而是说明这个系统里根本没有「熵」可增。演化是确定性的，第 t 步的状态可以用「初态 + t + 规则」完整描述，所以 <span class="mono">K(xₜ) ≤ K(x₀) + K(t) + O(1)</span>，整条轨迹都很简单。gzip 显示的上升，只说明 gzip 不会「把方块扩散 t 步」这个程序。这正是第 5 课讲的资源限制：一个算力有限的观察者看到的复杂度，可以和 K 差得很远。</li>
+</ol>
+
+<p>所以想在模拟里看到「熵单调增、复杂度先升后降」，需要两样东西：微观上有随机性，让细粒度熵真的能增长；再加上一个够粗的粗粒化，把这些随机性抹掉。论文的粒子模型两样都有，notebook 的连续扩散一样都没有。</p>
+
+<h2>6　回想测验</h2>
+<p class="muted">凭记忆作答，先别往上翻。</p>
+
+<div class="quiz" data-answer="2">
+<p class="q">1. 论文里的「熵」是怎么估计的？</p>
+<ol><li>20 区间直方图的 Shannon 熵</li><li>粗粒化分档后数组的 gzip 大小</li><li>细粒度数组的 gzip 大小</li><li>相邻格子的转换次数</li></ol>
+<p class="explain">细粒度数组的压缩长度估计 K(x)，也就是熵；粗粒化分档后的压缩长度估计 K(S)，是表观复杂度。</p>
+</div>
+
+<div class="quiz" data-answer="2">
+<p class="q">2. 完全混合后，用 9×9 窗口粗粒化，一个格子落到中间档以外的概率大约是？</p>
+<ol><li>32%</li><li>10%</li><li>0.3%</li><li>恰好 0</li></ol>
+<p class="explain">σ = 1/(2w) = 1/18，离开中间档要偏离 w/3 = 3 个标准差，2Φ(−3) ≈ 0.27%。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">3. 换成调整后的粗粒化（七档 + 按行多数调整）以后，非交互模型的复杂度曲线怎样？</p>
+<ol><li>仍然先升后降，峰值更高</li><li>被压平到很低，附录证明它不会变复杂</li><li>单调上升，和熵一样</li><li>变成负数</li></ol>
+<p class="explain">粒子独立游走，每一行的浓度可以从 n 和 t 算出来，所以粗粒化图像总是简单的。原方法里的先升后降是分档伪影。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">4. notebook 的连续扩散跑到 t = 2000，细粒度（256 级）压缩长度怎样？</p>
+<ol><li>一直上升，接近随机数组</li><li>上升后停在最高点不动</li><li>一开始就是最大值</li><li>先升到 500 多字节，再降回 26 字节</li></ol>
+<p class="explain">确定性演化的终态是均匀的 0.04，非常简单。K(xₜ) ≤ K(x₀) + K(t) + O(1)，gzip 的上升只是它不会运行扩散方程。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">5. 为什么 r = 0.2 时 notebook 的 <code>clamp(0, 1)</code> 从来不起作用？</p>
+<ol><li>1 − 4r ≥ 0，新值是旧值的凸组合，不会超出 [0, 1]</li><li>replicate 边界会自动截断</li><li>conv2d 的输出总在 [0, 1] 里</li><li>float32 存不下大于 1 的数</li></ol>
+<p class="explain">新值 = (1 − 4r)v + r·Σ邻居，五个系数都非负且和为 1。r > 1/4 时中心系数变负，才可能越界，也才会出现数值不稳定。</p>
+</div>
+
+<h2>7　编程练习</h2>
+
+<div class="exercise">
+<h3>练习 C：用 torch 复现先升后降</h3>
+<p>模拟部分用纯 Python 列表最快（逐格交换用张量反而慢），这段直接拿去用：</p>
+<pre><code>import random, zlib
+import torch
+import torch.nn.functional as F
+
+def init(n):
+    return [[1 if y &lt; n // 2 else 0 for x in range(n)] for y in range(n)]
+
+def run(g, n, steps, rng):
+    for _ in range(steps):
+        y, x = rng.randrange(n), rng.randrange(n)
+        dy, dx = [(-1, 0), (1, 0), (0, -1), (0, 1)][rng.randrange(4)]
+        y2, x2 = y + dy, x + dx
+        if 0 &lt;= y2 &lt; n and 0 &lt;= x2 &lt; n and g[y][x] != g[y2][x2]:
+            g[y][x], g[y2][x2] = g[y2][x2], g[y][x]</code></pre>
+<p>你要写三个函数：</p>
+<ul>
+<li><code>coarse_grain(x, w)</code>：输入 <span class="mono">(n, n)</span> 的 0/1 张量，返回同形状的窗口平均。用 <code>F.avg_pool2d</code>，它要求输入形状是 <span class="mono">(N, C, H, W)</span>；想想 <code>stride</code>、<code>padding</code>、<code>count_include_pad</code> 各该取什么<sup class="cite"><a href="#src3">[3]</a></sup>。</li>
+<li><code>quantize(cg, k=3)</code>：把 [0, 1] 的平均值分成 k 档，返回整数张量。</li>
+<li><code>clen(x)</code>：把整数张量转成字节串，返回 <code>zlib.compress(..., 9)</code> 的长度<sup class="cite"><a href="#src4">[4]</a></sup>。</li>
+</ul>
+<p>验收：</p>
+<pre><code>fig1 = torch.tensor([[0,1,0,0,1],[0,1,1,0,1],[0,1,0,1,0],[1,0,1,1,1],[1,0,1,0,0]])
+cg = coarse_grain(fig1, 3)
+assert cg.shape == (5, 5)
+assert abs(cg[1, 1] - 4/9) &lt; 1e-6 and abs(cg[0, 0] - 0.5) &lt; 1e-6   # 练习 A 的两个答案
+
+n, rng, g = 48, random.Random(0), init(n)
+S, C = [], []
+for t in range(25):
+    x = torch.tensor(g)
+    S.append(clen(x))
+    C.append(clen(quantize(coarse_grain(x, 9))))
+    run(g, n, 250_000, rng)
+peak = max(C)
+assert 0 &lt; C.index(peak) &lt; len(C) - 1      # 峰值在中间
+assert C[-1] &lt; peak / 3                     # 最后回落
+assert S[-1] &gt; 10 * S[0]                    # 熵涨了一个数量级以上
+print(S[::4], C[::4])</code></pre>
+<p>做完以后，再试一个单变量实验：把窗口换成 3，或者把三档换成七档，只改这一处，看曲线怎么变。用第 3 节的推导解释你看到的结果。</p>
+<details><summary>参考解答（写完再看）</summary>
+<pre><code>def coarse_grain(x: torch.Tensor, w: int) -&gt; torch.Tensor:
+    x4 = x[None, None].float()                       # (n, n) → (1, 1, n, n)
+    cg = F.avg_pool2d(x4, kernel_size=w, stride=1, padding=w // 2,
+                      count_include_pad=False)       # 伸出边界的部分不计入平均
+    return cg[0, 0]                                  # 再去掉两个长度为 1 的维度
+
+def quantize(cg: torch.Tensor, k: int = 3) -&gt; torch.Tensor:
+    return (cg * k).long().clamp(max=k - 1)          # 1.0 本该是第 k 档，压回 k−1
+
+def clen(x: torch.Tensor) -&gt; int:
+    return len(zlib.compress(x.to(torch.uint8).numpy().tobytes(), 9))</code></pre>
+<p><code>stride=1</code> 让窗口每次只挪一格，输出和输入一样大；<code>padding=w // 2</code> 让窗口以每个格子为中心；<code>count_include_pad=False</code> 就是练习 A 第二问的规则，默认值 <code>True</code> 会把边上的格子拉向 0。<code>x[None, None]</code> 等价于连续两次 <code>unsqueeze(0)</code>，notebook 的 <code>diffusion_2d</code> 里写的就是后者。</p>
+<p>我用纯 Python 实现了同样的逻辑，跑出来的数字是第 2 节表里那些。torch 用 float32，档位边界上的取整可能有个别格子不同，所以压缩长度和表里会差几个字节，但不影响三条 assert。</p>
+</details>
+<p class="muted" style="font-size:.88rem">进阶：把 notebook 的 <code>diffusion_2d</code> 跑到 2000 步，用 <code>(x * 256).long().clamp(max=255)</code> 做细粒度量化，复现第 5 节那张表里「熵」的先升后降。环境提示：先按仓库 README 建好 <code>.venv</code>。</p>
+</div>
+
+<h2>8　全章回顾</h2>
+
+<p>七课串起来是一条线：先生成系统（第 1 课），再试着量它（第 2、3 课），发现简单的度量量不准，于是去理论里找「复杂度」的正确定义（第 4、5 课），然后回到 notebook 的第二个系统（第 6 课），最后用论文的方法把定义落到可以跑的实验上（本课）。下表对照 MISSION.md 里的五条「学成标准」：</p>
+
+<table class="recap" style="width:100%">
+<tr><th>学成标准</th><th>在哪一课</th><th>检验方式</th></tr>
+<tr><td>从规则号 30 推出规则表和 <span class="mono">l ⊕ (c ∨ r)</span>，用 <code>torch.roll</code> 写任意初等元胞自动机</td><td><a href="0001-rule30-from-number-to-tensor.html">第 1 课</a></td><td>不看笔记写出 <code>make_rule(n)</code></td></tr>
+<tr><td>推导 Shannon 熵的性质，说清 notebook 的熵和「转换次数」各自在量什么、哪里不准</td><td><a href="0002-shannon-entropy.html">第 2 课</a>、<a href="0003-measure-traps.html">第 3 课</a></td><td>证明 h(p) ≤ 1；举出熵为 1 但很有规律的状态</td></tr>
+<tr><td>讲清 Kolmogorov 复杂度、sophistication、complextropy，以及为什么要加资源限制</td><td><a href="0004-kolmogorov-sophistication.html">第 4 课</a>、<a href="0005-complextropy-resource-bounds.html">第 5 课</a></td><td>用本课第 5 节的例子解释：K 很小，gzip 却很大，说明了什么</td></tr>
+<tr><td>把咖啡扩散写成 <code>conv2d</code> + 拉普拉斯核，对应到扩散方程的离散化</td><td><a href="0006-laplacian-conv2d.html">第 6 课</a></td><td>说出 r ≤ 1/4 的来历（本课测验第 5 题）</td></tr>
+<tr><td>独立改 notebook 做单变量实验，写一段能教给别人的讲解</td><td>本课</td><td>下面的结业作业</td></tr>
+</table>
+
+<div class="box">
+<p><strong>结业作业：</strong>从下面选一个变量，只改它，其余保持练习 C 的设置：窗口边长 w、分档数 k、网格边长 n、压缩器（<code>zlib</code> 换成 <code>bz2</code> 或 <code>lzma</code>）。跑出熵和复杂度两条曲线，再写 300 字左右的讲解，要包括：你预测会怎样、实际怎样、用哪一课的哪个推导来解释。论文图 5 已经告诉你换压缩器后的定性结果<sup class="cite"><a href="#src1">[1, 图 5]</a></sup>，可以拿来对照。</p>
+</div>
+
+<h2>延伸阅读</h2>
+<p><strong>主读：</strong>Aaronson, Carroll, Ouellette，<a href="https://arxiv.org/abs/1405.6903">"Quantifying the Rise and Fall of Complexity in Closed Systems: The Coffee Automaton"</a>（2014）。读第 3、5、6 节和附录，正好对应本课第 1 到 4 节。第 2 节把四种复杂度定义（表观复杂度、sophistication、logical depth、light-cone complexity）放在一起比较，可以当第 4、5 课的复习。本地 PDF：<a href="../../../papers_pdf/07_coffee_automaton.pdf">papers_pdf/07_coffee_automaton.pdf</a>。</p>
+<p><strong>选读：</strong>回到 Aaronson 2011 年博客的评论区<sup class="cite"><a href="#src2">[2]</a></sup>。学完这一章再看那些反例和改进建议，你应该能判断哪些说到了点子上。</p>
+
+<p class="ask box plain">有不清楚的地方，直接在终端问我。比如「为什么粗粒化状态的压缩长度能近似 K(S)」，或者「练习 C 的 assert 没过」。结业作业写完可以发给我，我会按 MISSION.md 的标准逐条给反馈，也可以帮你把它整理成这门课的讲义。</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">S. Aaronson, S. M. Carroll, L. Ouellette, <a href="https://arxiv.org/abs/1405.6903">"Quantifying the Rise and Fall of Complexity in Closed Systems: The Coffee Automaton"</a>, arXiv:1405.6903, 2014。本课引用了 §2.1、§3、§4、§5、§6、§7 和附录。</li>
+<li id="src2">Aaronson, <a href="https://scottaaronson.blog/?p=762">The First Law of Complexodynamics</a>, Shtetl-Optimized, 2011-09-23。</li>
+<li id="src3">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.avg_pool2d.html">torch.nn.functional.avg_pool2d</a>。</li>
+<li id="src4">Python 文档：<a href="https://docs.python.org/3/library/zlib.html">zlib</a>；浏览器端的同一算法：<a href="https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream">MDN: CompressionStream</a>。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0006-laplacian-conv2d.html">← 第 6 课：拉普拉斯核与 conv2d</a></span>
+<span><a href="../reference/glossary.html">术语表</a></span>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../assets/l7-coffee.js"></script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rule 30 到一行 PyTorch</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 1 课 · 复杂动力学第一定律</p>
+<h1>从数字 30 到一行 PyTorch</h1>
+<p class="subtitle">规则号怎样编码一张规则表，以及 <code>torch.roll</code> 怎样一次更新所有格子</p>
+
+<p>Aaronson 的问题是：为什么在一个封闭系统里，熵只增不减，「有趣的结构」却先出现再消失<sup class="cite"><a href="#src4">[4]</a></sup>？notebook 用 Rule 30 当第一个实验对象，因为它规则极简，演化出的图案却很复杂<sup class="cite"><a href="#src1">[1]</a></sup>。后面每一节测熵、测复杂度，都要先把这张图生成出来。所以第一步是吃透 notebook 第 1 节里这一行：</p>
+
+<pre><code>history[t] = rule_func(torch.roll(prev, 1), prev, torch.roll(prev, -1))</code></pre>
+
+<p class="win"><strong>本课收获：</strong>给你任意一个规则号 <span class="mono">n ∈ [0, 255]</span>，你能写出它的规则表，并能写出 PyTorch 函数 <code>make_rule(n)</code>，直接替换 notebook 里的 <code>rule_30</code> 使用。</p>
+
+<div class="ca-evolve" data-rule="30" data-width="61" data-steps="30" aria-label="Rule 30 从单个格子演化 30 步"></div>
+<p class="muted" style="font-size:.85rem">↑ Rule 30 从中间一个黑格出发演化 30 步。这张图由本页的 <code>assets/ca.js</code> 实时算出，用的是本课讲的同一条规则。</p>
+
+<h2>1　规则号就是规则表</h2>
+
+<p>每个格子下一刻的状态，只取决于它自己 <span class="mono">c</span> 和左右邻居 <span class="mono">l, r</span>。三个 0/1 一共有 2³ = 8 种组合。把每种组合 <span class="mono">(l, c, r)</span> 当成一个三位二进制数：</p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">k = 4l + 2c + r</span>　　新状态 = 规则号 n 的第 k 位 = <span class="mono">(n &gt;&gt; k) &amp; 1</span></p></div>
+
+<p>这就是 Wolfram 的编号约定：把规则号写成二进制，各位依次给出 8 种情况的新颜色<sup class="cite"><a href="#src2">[2]</a></sup>。30 = 16 + 8 + 4 + 2，所以第 4、3、2、1 位是 1，其余是 0：</p>
+
+<table>
+<tr><th class="l">邻域 l c r</th><td class="mono">111</td><td class="mono">110</td><td class="mono">101</td><td class="mono">100</td><td class="mono">011</td><td class="mono">010</td><td class="mono">001</td><td class="mono">000</td></tr>
+<tr><th class="l">k</th><td>7</td><td>6</td><td>5</td><td>4</td><td>3</td><td>2</td><td>1</td><td>0</td></tr>
+<tr><th class="l">新状态（30 的第 k 位）</th><td>0</td><td>0</td><td>0</td><td>1</td><td>1</td><td>1</td><td>1</td><td>0</td></tr>
+</table>
+
+<p>表的第三行从左往右读就是 <span class="mono">00011110₂ = 30</span>，与 Wikipedia 给出的规则表一致<sup class="cite"><a href="#src1">[1]</a></sup>。注意 notebook 的表也是从 111 排到 000，原因就在这里：这样排，输出那一列从上往下读刚好是规则号的二进制。</p>
+
+<h2>2　推导布尔式 l ⊕ (c ∨ r)</h2>
+
+<p>notebook 直接给出 <span class="mono">f(l,c,r) = l ⊕ (c ∨ r)</span>，没有推导。下面用分情况讨论证明它和上表完全等价。</p>
+
+<div class="proof">
+<p><strong>情况一：c ∨ r = 0</strong>，即 c = r = 0。对应邻域 100 和 000，查表得新状态分别为 1 和 0，<em>正好等于 l</em>。而 l ⊕ 0 = l。✓</p>
+<p><strong>情况二：c ∨ r = 1</strong>。对应剩下的 6 种邻域：l = 1 时（111, 110, 101）新状态全是 0，l = 0 时（011, 010, 001）全是 1，<em>正好等于 ¬l</em>。而 l ⊕ 1 = ¬l。✓</p>
+<p>两种情况覆盖了全部 8 个邻域，所以两种写法处处相等。<span class="qed">∎</span></p>
+</div>
+
+<p>这条证明还给出一句直白的读法：<strong>中间和右边都是空的，就照抄左邻居；只要有一个不空，就把左邻居取反。</strong>Wikipedia 写作 <span class="mono">p xor (q or r)</span>，是同一个式子<sup class="cite"><a href="#src1">[1]</a></sup>。</p>
+
+<h2>3　<code>torch.roll</code>：一次拿到所有格子的左邻居</h2>
+
+<p>官方文档对 <code>torch.roll</code> 的说明是：把张量沿某一维滚动，移出最后一个位置的元素会从第一个位置重新进入<sup class="cite"><a href="#src3">[3]</a></sup>。</p>
+
+<pre><code>x = torch.tensor([1, 2, 3, 4, 5])
+torch.roll(x, 1)    # tensor([5, 1, 2, 3, 4])
+torch.roll(x, -1)   # tensor([2, 3, 4, 5, 1])</code></pre>
+
+<p>关键是方向。<code>roll(x, 1)</code> 把内容往右挪一格，于是新张量第 i 位放的是原来第 i−1 位：</p>
+
+<div class="box"><p style="margin:0"><span class="mono">torch.roll(x, 1)[i] = x[i − 1]</span>　→　每个格子的<strong>左</strong>邻居<br><span class="mono">torch.roll(x, −1)[i] = x[i + 1]</span>　→　每个格子的<strong>右</strong>邻居</p></div>
+
+<p>「往右挪」得到的却是「左邻居」，这是最容易记反的地方。另外，下标 0 的左邻居会绕回 <span class="mono">x[n−1]</span>，这就是 notebook 说的周期边界：100 个格子首尾相接，排成一个环。</p>
+
+<p>三个张量 <code>left, center, right</code> 形状相同（都是 <span class="mono">(size,)</span>），<code>^</code> 和 <code>|</code> 对它们逐元素运算。所以 <code>rule_30(left, center, right)</code> 一次就算完一整行，不用写 for 循环遍历格子。</p>
+
+<h2>4　练习</h2>
+
+<div class="exercise">
+<h3>练习 A：手算一步 Rule 30</h3>
+<p>先算出每一格的 k = 4l + 2c + r，再查第 1 节的表。下标 0 和下标 9 两格要绕回到另一端取邻居。</p>
+<div class="ca-step" data-rule="30" data-row="0010110100"></div>
+</div>
+
+<div class="exercise">
+<h3>练习 B：换一条规则，写出 Rule 90 的规则表</h3>
+<p>不要看任何表。先把 90 写成 8 位二进制，再点格子填出每种邻域的新状态（黑 = 1）。</p>
+<div class="ca-rule" data-rule="90"></div>
+</div>
+
+<h3>回想测验</h3>
+<p class="muted">凭记忆作答，先别往上翻。选错的会被划掉，可以再选。</p>
+
+<div class="quiz" data-answer="2">
+<p class="q">1. 执行 <code>left = torch.roll(x, 1)</code> 后，<code>left[i]</code> 等于？</p>
+<ol><li>x[i+1]，右边的格子</li><li>x[i]，格子它自己</li><li>x[i-1]，左边的格子</li><li>x[-i]，镜像的格子</li></ol>
+<p class="explain">roll(x, 1) 把内容整体往右挪一格，所以第 i 位放的是原来第 i−1 位，也就是左邻居。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">2. 在 Rule 30 中，邻域 <span class="mono">011</span> 对应哪一位？新状态是多少？</p>
+<ol><li>k=3，新状态为 1</li><li>k=6，新状态为 0</li><li>k=3，新状态为 0</li><li>k=4，新状态为 1</li></ol>
+<p class="explain">k = 4·0 + 2·1 + 1 = 3；30 = 00011110₂，第 3 位是 1。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">3. 第 2 节的证明里，当 c ∨ r = 1 时，Rule 30 的新状态是什么？</p>
+<ol><li>恒为 0</li><li>恒为 1</li><li>取 l 本身</li><li>取 l 的反</li></ol>
+<p class="explain">l ⊕ 1 = ¬l。查表：111、110、101 → 0，011、010、001 → 1。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">4. 根据练习 B 填出的表，Rule 90 的布尔式是？</p>
+<ol><li>l ⊕ c</li><li>l ⊕ r</li><li>c ⊕ r</li><li>l ∨ r</li></ol>
+<p class="explain">90 = 01011010₂。逐个核对 8 种邻域，新状态都等于 l ⊕ r，跟中间那格无关。</p>
+</div>
+
+<div class="quiz" data-answer="2">
+<p class="q">5. 当 size = 100 时，<code>torch.roll</code> 给 x[0] 取的左邻居是？</p>
+<ol><li>0，边界一律补零</li><li>x[1]，右边那一格</li><li>x[99]，绕回到末尾</li><li>x[0]，复制它自己</li></ol>
+<p class="explain">roll 是循环移位，所以这是周期边界。选项 D 其实是第 3 节咖啡扩散用的 replicate 填充，两种边界到时候要对比。</p>
+</div>
+
+<div class="exercise">
+<h3>练习 C（编程）：<code>make_rule(n)</code></h3>
+<p>在 notebook 第 1.3 节之后新开一个单元格，写一个函数 <code>make_rule(n)</code>。它返回一个规则函数，签名与 <code>rule_30(left, center, right)</code> 相同，可以直接传给 <code>evolve_ca</code>。要求：不用 if，也不用循环遍历格子。</p>
+<p>提示：先把 8 个输出做成长度为 8 的张量 <code>table</code>，再想想 <code>4*left + 2*center + right</code> 这个张量能拿来干什么。</p>
+<p>验收：</p>
+<pre><code>assert torch.equal(evolve_ca(initial, 100, make_rule(30)),
+                   evolve_ca(initial, 100, rule_30))
+plt.imshow(evolve_ca(initial, 100, make_rule(90)), cmap='binary')  # 应看到谢尔宾斯基三角</code></pre>
+<details><summary>参考解答（写完再看）</summary>
+<pre><code>def make_rule(n: int) -&gt; Callable:
+    table = torch.tensor([(n &gt;&gt; k) &amp; 1 for k in range(8)])  # table[k] = 第 k 位
+    def rule(left, center, right):
+        return table[4 * left + 2 * center + right]          # 用整数张量做下标查表
+    return rule</code></pre>
+<p><code>4*left + 2*center + right</code> 是一个和整行同形状的整数张量，每个元素就是该格的 k。用它去索引 <code>table</code>，会得到同形状的结果，整行一次查完。这种做法叫「高级索引」，后面实现 embedding 时还会遇到。</p>
+</details>
+<p class="muted" style="font-size:.88rem">环境提示：这台 Mac 自带的 <code>python3</code> 没装 torch。先按仓库 README 建好 <code>.venv</code>，并选择内核「论文解读」。</p>
+</div>
+
+<h2>延伸阅读</h2>
+<p><strong>主读：</strong>Scott Aaronson，<a href="https://scottaaronson.blog/?p=762">"The First Law of Complexodynamics"</a>（2011）。这一课只需读开头到咖啡杯那几段，弄清楚他问的是什么问题。之后每一课都会回到这篇。本地 PDF：<a href="../../../papers_pdf/06_complexodynamics.pdf">papers_pdf/06_complexodynamics.pdf</a>。</p>
+
+<p class="ask box plain">有不清楚的地方，直接在终端问我。比如「为什么规则号的第 k 位对应 4l+2c+r」，或者「练习 C 报错了」，都可以。做完练习 C 后告诉我结果，我会据此安排第 2 课：Shannon 熵的推导，以及 notebook 里的熵到底在量什么。</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1"><a href="https://en.wikipedia.org/wiki/Rule_30">Wikipedia: Rule 30</a>：规则表、布尔式 <span class="mono">p xor (q or r)</span>。</li>
+<li id="src2">Wolfram, <a href="https://www.wolframscience.com/nks/p53--more-cellular-automata/"><em>A New Kind of Science</em>, p.53</a>：规则号的二进制编码约定。</li>
+<li id="src3"><a href="https://docs.pytorch.org/docs/stable/generated/torch.roll.html">PyTorch 文档：torch.roll</a>。</li>
+<li id="src4">Aaronson, <a href="https://scottaaronson.blog/?p=762">The First Law of Complexodynamics</a>, Shtetl-Optimized, 2011-09-23。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="../reference/glossary.html">术语表</a> · <a href="../reference/eca-cheatsheet.html">速查：初等元胞自动机</a></span>
+<a href="0002-shannon-entropy.html">下一课：Shannon 熵 →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../assets/ca.js"></script>
+</body>
+</html>

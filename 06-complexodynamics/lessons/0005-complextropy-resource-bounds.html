@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Complextropy 与资源限制</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  blockquote { margin: 1.2rem 0; padding: .2rem 0 .2rem 1rem; border-left: 3px solid var(--rule); color: var(--muted); font-style: italic; }
+  blockquote p { margin: .4rem 0; }
+  .l5-out table { width: 100%; max-width: 32rem; }
+  .l5-out td { text-align: right; }
+</style>
+</head>
+<body>
+<main>
+
+<p class="kicker">第 5 课 · 复杂动力学第一定律</p>
+<h1>Complextropy：为什么必须加资源限制</h1>
+<p class="subtitle">一个确定性系统的状态，总有一段只有 log t 位长的描述。这一课讲这个事实怎样让 K 和 sophistication 都失效，以及 Aaronson 怎样用「程序必须跑得快」把它堵上</p>
+
+<p>第 4 课最后，sophistication 看上去正是我们要的东西：简单的串很低，随机的串也很低，只有「既不简单也不随机」的串才高。但 Aaronson 紧接着写道<sup class="cite"><a href="#src1">[1]</a></sup>：</p>
+
+<blockquote><p>Unfortunately, as we defined it above, sophistication still doesn't do the job. For deterministic systems, the problem is the same as the one pointed out earlier for Kolmogorov complexity: we can always describe the system's state after t time steps by specifying the initial state, the transition rule, and t. Therefore the sophistication can never exceed log(t) + c.</p></blockquote>
+
+<p>这一课先把这段话证明清楚，再看他的修正方案 complextropy：在定义里的两个地方加上计算效率的要求。</p>
+
+<p class="win"><strong>本课收获：</strong>你能证明 K(xₜ) ≤ log₂ t + O(log log t) + C，并由此说明不加限制的 K 和 Soph 都画不出「先升后降」。你能说出 complextropy 定义里的两处效率约束各自防的是什么。你还能解释为什么 gzip 这种压缩长度，可以当作资源受限复杂度的粗糙替身。</p>
+
+<h2>1　问题：确定性系统的状态太好描述了</h2>
+
+<p>拿第 1 课的 Rule 30 来说。从中间一个黑格出发，在无限长的直线上跑 t 步，第 t 行有 2t + 1 格，看上去是一片乱码。直觉上，描述它应该需要大约 2t + 1 位。但 Aaronson 指出<sup class="cite"><a href="#src1">[1]</a></sup>：</p>
+
+<blockquote><p>if the system happens to be deterministic, then mathematically, its state can always be specified by giving (1) the initial state, and (2) the number of steps t it's been run for. The former takes a constant number of bits to specify (independent of t), while the latter takes log(t) bits.</p></blockquote>
+
+<p>也就是说，只要说清楚「Rule 30，中间一个黑格，跑 t 步」，就能唯一确定这一行。这段描述里唯一随 t 变长的部分，就是 t 本身的二进制写法。</p>
+
+<h2>2　主证明：K(xₜ) 至多按 log t 增长</h2>
+
+<div class="proof">
+<p><strong>设定。</strong>初态 x₀ 和转移规则 R 都固定，跟 t 无关。xₜ = Rᵗ(x₀) 是跑 t 步后的状态。</p>
+<p><strong>构造程序 Pₜ。</strong>Pₜ 由四段拼成：（a）一个通用的模拟器，作用是「读入 x₀、R、t，把 R 作用 t 次，输出结果」；（b）x₀ 的编码；（c）R 的编码；（d）t 的编码。（a）（b）（c）三段跟 t 无关，长度合计记为常数 C。</p>
+<p><strong>t 怎么编码。</strong>程序必须知道 t 的编码在哪里结束，所以 t 的编码要自定界。一种做法是：设 t 的二进制有 ℓ = ⌊log₂ t⌋ + 1 位，先把 ℓ 的二进制每一位写两遍，再写一个分隔符 01，最后写 t 的 ℓ 位。读的时候两位两位地读，读到 01 就知道 ℓ 写完了，再往后读 ℓ 位就是 t。这段编码长 ℓ + 2⌈log₂(ℓ + 1)⌉ + 2 = log₂ t + O(log log t)。</p>
+<p><strong>结论。</strong>Pₜ 输出 xₜ，长度不超过 log₂ t + O(log log t) + C。K(xₜ) 是所有能输出 xₜ 的程序里最短的长度，所以</p>
+<p style="text-align:center"><span class="mono">K(xₜ) ≤ log₂ t + O(log log t) + C</span><span class="qed">∎</span></p>
+</div>
+
+<p>Aaronson 把右边简写成 log(t) + c，把 log log t 这一项也并进了「常数」里。两种写法的意思一样：<strong>K 随 t 至多按对数增长。</strong></p>
+
+<p><strong>推论 1（熵）。</strong>如果用 K 当作熵，它的增长慢得离谱。t = 10⁶ 时，第 t 行有 2,000,001 位，K 的上界却只有大约 20 位再加一个常数。Aaronson 的原话是 "much slower than the linear or polynomial increase that we'd intuitively expect"<sup class="cite"><a href="#src1">[1]</a></sup>。</p>
+
+<p><strong>推论 2（sophistication）。</strong>按第 4 课的定义，Soph(x) 是所有满足条件的模型 S 中最小的 K(S)。取单元素集 S = {x}：x ∈ S 显然成立；条件 K(x|S) ≥ log₂|S| − c 的右边是 log₂ 1 − c = −c，也自动成立。所以 Soph(x) ≤ K({x}) ≤ K(x) + O(1)。代入主证明：</p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">Soph(xₜ) ≤ log₂ t + O(log log t) + C</span></p></div>
+
+<p>这条曲线也许会起伏，但它被一条几乎是平的天花板压着。像 notebook 第 3 节那样 50 × 50 的咖啡杯有 2500 格，就算跑一万亿步，log₂ t 也才约 40 位。这样的量没法在中间时刻变得「很大」，Sean Carroll 要的峰值也就画不出来。</p>
+
+<p><strong>换成随机系统也一样。</strong>Aaronson 接着论证：如果每一步带随机性，可以取 S(t) 为「t 步后所有可能的状态」组成的集合。描述 S(t) 只需要初态、随机规则和 t。只要 S(t) 上的分布是均匀的，用计数论证可知，实际状态几乎总是 S(t) 里的「普通」成员，所以 sophistication 仍然 "will almost never exceed log(t) + c"<sup class="cite"><a href="#src1">[1]</a></sup>。分布不均匀的情况他说需要更多技术论证，没有展开。2014 年的咖啡自动机论文用另一种取法给出了同样的结论：取 S 为「概率约等于 Pr[x] 的所有输出」，描述它只要 O(log n) 位<sup class="cite"><a href="#src2">[2]</a></sup>。</p>
+
+<h2>3　短描述的代价：要跑很久</h2>
+
+<p>上面的 Pₜ 很短，但它要真的把 t 步全模拟一遍。在无限直线的设定下，第 s 步要算 2s + 1 格，跑完 t 步总共要做 t² + 2t 次格子更新。拿它和 Aaronson 例子里的时间预算 n log₂ n 比一比（n = 2t + 1 是输出的长度）。拖动滑块看看：</p>
+
+<div class="l5-budget"></div>
+
+<p>t 从 7 开始，t² + 2t 就超过了 n log₂ n（t = 6 时是 48 对 48.1，刚好压线），并且差距越拉越大：t = 1000 时要做 1,002,000 次更新，预算只有约 21,944。<strong>一旦定义要求「程序必须在 n log n 时间内输出」，Pₜ 就不能用了，log t 的上界也随之失效。</strong></p>
+
+<p>注意这里只排除了 Pₜ 这一个程序，并没有证明不存在别的既短又快的程序。对 Rule 30 来说，能不能不逐步模拟就直接跳到第 t 行，本身是一个公开问题。Wolfram 2019 年为 Rule 30 设的悬赏题里，就有一道问计算中心列第 n 格是否至少要花大约 n 的计算量<sup class="cite"><a href="#src4">[4]</a></sup>。</p>
+
+<div class="exercise">
+<h3>练习 A：一万亿步要多少位？</h3>
+<p>t = 10¹² 时，⌈log₂ t⌉ 是多少？不用计算器，用 2¹⁰ ≈ 10³ 估算。</p>
+<div class="l5-num" data-answer="40" data-tol="0.5" data-placeholder="⌈log₂ t⌉ = ?" data-hint="10¹² = (10³)⁴ ≈ (2¹⁰)⁴。" data-explain="10¹² ≈ (2¹⁰)⁴ = 2⁴⁰；精确值 log₂ 10¹² ≈ 39.86，向上取整是 40。这时状态有 2×10¹² + 1 位，描述里随 t 变的部分只有 40 位。"></div>
+</div>
+
+<h3>一个现成的「时间受限压缩器」：gzip</h3>
+
+<p>gzip（这里用 Python 的 <code>zlib</code>，压缩级别 9）只在线性时间里找局部重复，不会去猜「这是 Rule 30 跑了 t 步」。所以它可以看作一种非常严格的资源受限压缩器。我把无限直线上 Rule 30 的第 t 行按位打包后交给它压缩：</p>
+
+<table>
+<tr><th class="l">t</th><td>250</td><td>500</td><td>1000</td><td>2000</td></tr>
+<tr><th class="l">行长 2t+1（位）</th><td>501</td><td>1001</td><td>2001</td><td>4001</td></tr>
+<tr><th class="l">zlib 压缩后（位）</th><td>592</td><td>1096</td><td>2096</td><td>4096</td></tr>
+<tr><th class="l">⌈log₂ t⌉（位，另加常数）</th><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+</table>
+
+<p>zlib 一点也没压下去，压缩后反而比按位打包的原始数据还多了大约 90 位的格式开销。在它看来，这一行就是随机的，压缩长度随 t 线性增长，正是我们期待的「熵」的样子。Aaronson 说的 "if we rule out sufficiently complex programs, we can again get our program size to increase with t at a polynomial rate"<sup class="cite"><a href="#src1">[1]</a></sup>，在这里看得很具体。</p>
+
+<h2>4　Aaronson 的修正：complextropy</h2>
+
+<p>先看熵这一半的修法。把 K 换成<strong>资源受限的 Kolmogorov 复杂度</strong>：在给定时间 T(n) 内输出 x 的最短程序的长度<sup class="cite"><a href="#src1">[1]</a></sup>。</p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">Kᵀ(x) = min { |p| : 通用机运行 p，在 T(n) 步内输出 x }</span></p></div>
+
+<p>候选程序变少了，最小值只会变大，所以总有 Kᵀ(x) ≥ K(x)。Aaronson 还说，具体加哪种资源限制不太重要，比如也可以限制为深度为 3 的电路，"as long as the bound is severe enough"。</p>
+
+<p>复杂度这一半的修法，就是给 sophistication 也加上同样的限制。下面是他的原文定义<sup class="cite"><a href="#src1">[1]</a></sup>：</p>
+
+<blockquote><p>the number of bits in the shortest computer program that runs in n log(n) time, and that outputs a nearly-uniform sample from a set S such that (i) x ∈ S, and (ii) any computer program that outputs x in n log(n) time, given an oracle that provides independent, uniform samples from S, has at least log₂(|S|) − c bits, for some constant c.</p></blockquote>
+
+<p>拆开来看，定义里有两个程序：</p>
+
+<table>
+<tr><th class="l">角色</th><th class="l">要求</th><th class="l">对应 Soph 里的什么</th></tr>
+<tr><td class="l"><strong>采样器</strong>（被计长度的那个）</td><td class="l">n log n 时间内，输出 S 上近似均匀的样本</td><td class="l">描述 S 的程序，长度 K(S)</td></tr>
+<tr><td class="l"><strong>重构器</strong>（任何一个）</td><td class="l">n log n 时间内，可以向 S 要独立的均匀样本，要输出 x 至少需要 log₂|S| − c 位</td><td class="l">条件 K(x|S) ≥ log₂|S| − c：x 是 S 的普通成员</td></tr>
+</table>
+
+<p>第二个条件的白话是：<strong>在任何高效算法看来，x 都像是从 S 里随机抽出来的一个样本。</strong>complextropy 就是满足条件的最短采样器的长度。n log n 只是一个例子，Aaronson 说也可以换成别的时间上界，或者常数深度电路之类的弱计算模型。</p>
+
+<h3>两处效率约束，缺一不可</h3>
+
+<p>Aaronson 特意强调，效率要求必须同时加在两个程序上<sup class="cite"><a href="#src1">[1]</a></sup>：</p>
+
+<div class="proof">
+<p><strong>去掉对采样器的限制：</strong>又可以用「初态 + 规则 + t」去描述 S，回到第 2 节的论证，complextropy 不超过 log(t) + c，永远涨不起来。</p>
+<p><strong>去掉对重构器的限制：</strong>complextropy 会上升，但很可能一直升下去，不会回落。原因是受时间限制的采样器只能采到 S 的一个近似版本（"only a reasonable facsimile thereof"）。而不限时间的重构器可以利用 x 的特殊性质，用少于 log₂|S| − c 位就把 x 构造出来，使得这个近似版本的 S 不合格。</p>
+</div>
+
+<p>这就是本课标题的意思：不加资源限制，确定性动力学的 log t 短描述会把一切抹平。资源限制必须加，而且要两处都加。</p>
+
+<h2>5　猜想，以及能算的替身</h2>
+
+<p>Aaronson 的猜想是：加了两处效率约束的 complextropy 满足「复杂动力学第一定律」，初态小、中间大、混匀后又变小。他坦白说 "I don't yet know how to prove this conjecture"，并把它当作一个公开问题提出来：在咖啡杯这样的离散模型里，中间时刻的 complextropy 会不会变大？直觉是中间时刻要描述全黑、全白和混合区域之间不规则的边界，所以应该大<sup class="cite"><a href="#src1">[1]</a></sup>。</p>
+
+<p>难点是 complextropy 几乎肯定没法计算，连近似都难。他建议的经验路线是："using something you can compute (e.g., the size of a gzip compressed file) as a rough-and-ready substitute for something you can't compute"<sup class="cite"><a href="#src1">[1]</a></sup>。2014 年他和 Carroll、Ouellette 的论文就是这么做的<sup class="cite"><a href="#src2">[2]</a></sup>：</p>
+
+<ul>
+<li>用<strong>表观复杂度</strong>（apparent complexity）K(f(x))：先用一个平滑函数 f 把 x 粗粒化，去掉「偶然的」细节，再用压缩长度近似 K。</li>
+<li>论文 §2.5 指出，这相当于把 sophistication 的模型固定为 S<sub>f,x</sub> = {y : f(y) = f(x)}，也就是一种资源受限的 sophistication：不再在所有模型里取最小值，只看粗粒化给出的那一个。</li>
+<li>结果：粒子之间没有相互作用时，可以解析证明表观复杂度永远不会变大；有相互作用时，数值证据显示峰值大约与杯子的水平尺寸相当。</li>
+</ul>
+
+<p>第 7 课会动手做这件事：用粗粒化加压缩长度，复现「先升后降」。第 6 课先把扩散本身用 <code>conv2d</code> 写清楚。</p>
+
+<h2>6　回想测验</h2>
+<p class="muted">凭记忆作答，先别往上翻。</p>
+
+<div class="quiz" data-answer="2">
+<p class="q">1. 初态和规则都固定的确定性系统，第 t 步状态的 K(xₜ) 上界是？</p>
+<ol><li>2t + 1，等于状态长度</li><li>t，与步数成正比</li><li>log₂ t + O(log log t) + C</li><li>常数 C，与 t 无关</li></ol>
+<p class="explain">程序 = 模拟器 + x₀ + R + t。只有 t 的编码随 t 变长，自定界编码长度是 log₂ t + O(log log t)。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">2. 为什么 Soph(x) ≤ K(x) + O(1)？</p>
+<ol><li>取 S = {x}，条件 K(x|S) ≥ log₂ 1 − c 自动成立，而 K({x}) ≤ K(x) + O(1)</li><li>取 S = {0,1}ⁿ，任何串都是它的普通成员</li><li>因为 sophistication 是可计算的</li><li>因为 K(x|S) 总是不小于 K(x)</li></ol>
+<p class="explain">单元素集是 x 永远可用的模型。选项 B 解释的是「随机串的 Soph 很小」，不是这个上界。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">3. 如果 complextropy 只限制重构器、不限制采样器，会怎样？</p>
+<ol><li>会一直上升、不回落</li><li>又会被「初态 + 规则 + t」压到 log(t) + c 以下</li><li>变得可以计算</li><li>与 Shannon 熵相等</li></ol>
+<p class="explain">采样器不限时间，就可以从初态模拟 t 步得到 S，描述长度回到 log t 级别。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">4. 如果只限制采样器、不限制重构器，Aaronson 预计会怎样？</p>
+<ol><li>恒为 0</li><li>与 K(x) 完全相等</li><li>先升后降，正好是想要的形状</li><li>会上升，但很可能一直升下去</li></ol>
+<p class="explain">快速采样器只能采到 S 的近似版本，不限时间的重构器能利用 x 的特殊性质，用少于 log₂|S| − c 位造出 x，于是那个 S 不合格。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">5. 本课里 gzip 压缩长度扮演什么角色？</p>
+<ol><li>K(x) 的精确值</li><li>一个时间受限的压缩器，可以计算，并且看不出「初态 + 规则 + t」这种描述</li><li>Shannon 熵的另一种写法</li><li>complextropy 的定义本身</li></ol>
+<p class="explain">Rule 30 第 2000 行有 4001 位，zlib 压缩后是 4096 位，完全没压下去，而理论上的描述只要约 11 位加一个常数。</p>
+</div>
+
+<h2>7　编程练习</h2>
+
+<div class="exercise">
+<h3>练习 B：描述 = (规则, 初态, t)</h3>
+<p>用纯 Python（不需要 torch）写 <code>run(desc)</code>：输入描述 <code>desc = (rule, x0, t)</code>，在周期边界上从 x0 模拟 t 步，返回第 t 行，以及总共做了多少次格子更新。规则号的用法同第 1 课：<code>(rule &gt;&gt; (4*l + 2*c + r)) &amp; 1</code>。</p>
+<p>验收（设置与 notebook 相同：100 格，中间一个 1）：</p>
+<pre><code>N = 100
+x0 = [0] * N; x0[N // 2] = 1
+row, ops = run((30, x0, 70))
+assert sum(row) == 60            # 第 70 行有 60 个 1，和第 2 课的数据一致
+assert ops == N * 70             # 每步更新 N 格，总量随 t 线性增长
+
+import time
+for t in [1000, 2000, 4000, 8000]:
+    t0 = time.perf_counter(); run((30, x0, t))
+    print(t, round(time.perf_counter() - t0, 3))   # 时间大致随 t 翻倍</code></pre>
+<p>做完再回答：如果时间预算是 N log₂ N 次更新（N = 100 时约 664 次），这个描述最多能跑几步还算「高效」？</p>
+<details><summary>参考解答（写完再看）</summary>
+<pre><code>def step(row, rule):
+    n = len(row)
+    return [(rule &gt;&gt; (4*row[i-1] + 2*row[i] + row[(i+1) % n])) &amp; 1 for i in range(n)]
+
+def run(desc):
+    """按描述 (rule, x0, t) 从头模拟，返回第 t 行和格子更新次数。"""
+    rule, x0, t = desc
+    row, updates = list(x0), 0
+    for _ in range(t):
+        row = step(row, rule)
+        updates += len(row)
+    return row, updates</code></pre>
+<p><code>row[i-1]</code> 在 i = 0 时取到 <code>row[-1]</code>，<code>(i+1) % n</code> 在末尾绕回 0，这就是第 1 课 <code>torch.roll</code> 的周期边界。描述本身很短：规则 8 位，初态「中间一个 1」只要 O(log N) 位，t 只要 log₂ t 位。但运行代价是 N·t。预算 N log₂ N 只允许 t ≤ log₂ N ≈ 6.64，也就是最多 6 步。这台机器上 t 从 1000 翻倍到 8000，耗时大约是 0.005 → 0.011 → 0.020 → 0.035 秒，基本是线性的。</p>
+</details>
+</div>
+
+<h2>延伸阅读</h2>
+<p><strong>主读：</strong>Aaronson 原文从 "OK, that was entropy" 一直读到文末，本课第 2 到第 5 节对应的就是这一部分。本地 PDF：<a href="../../../papers_pdf/06_complexodynamics.pdf">papers_pdf/06_complexodynamics.pdf</a>，是 2011 年 <em>The Quantum Times</em> 第 6 卷第 2 期的转载版；同目录的 <code>06_complexodynamics_issue.pdf</code> 是那一期的全刊。</p>
+<p><strong>选读：</strong>Aaronson、Carroll、Ouellette 2014 年论文的 §2.2（sophistication，以及它为什么在咖啡杯上永远不大）和 §2.5（表观复杂度可以看成资源受限的 sophistication）。本地：<a href="../../../papers_pdf/07_coffee_automaton.pdf">papers_pdf/07_coffee_automaton.pdf</a>。读完这两节，第 7 课的实验设计就很好懂了。</p>
+
+<p class="ask box plain">有不清楚的地方，直接在终端问我。比如「t 的编码为什么要自定界」，或者「complextropy 定义里的 oracle 到底给了重构器什么」。做完练习 B 后把你算出的步数上限告诉我。</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">S. Aaronson, <a href="https://scottaaronson.blog/?p=762">"The First Law of Complexodynamics"</a>, Shtetl-Optimized, 2011-09-23；转载于 <em>The Quantum Times</em> 6(2), 2011。本课引文均出自转载版。</li>
+<li id="src2">S. Aaronson, S. M. Carroll, L. Ouellette, <a href="https://arxiv.org/abs/1405.6903">"Quantifying the Rise and Fall of Complexity in Closed Systems: The Coffee Automaton"</a>, arXiv:1405.6903, 2014，§2.2、§2.5。</li>
+<li id="src3">M. Li, P. Vitányi, <em>An Introduction to Kolmogorov Complexity and Its Applications</em>, Springer：资源受限复杂度一章。</li>
+<li id="src4">Wolfram, <a href="https://www.rule30prize.org/">Rule 30 Prizes</a>, 2019：关于中心列的三道悬赏题。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0004-kolmogorov-sophistication.html">← 第 4 课：Kolmogorov 复杂度与 sophistication</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0006-laplacian-conv2d.html">下一课：拉普拉斯核与 conv2d →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../assets/l5-budget.js"></script>
+</body>
+</html>

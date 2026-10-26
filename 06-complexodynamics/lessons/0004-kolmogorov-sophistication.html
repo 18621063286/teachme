@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kolmogorov 复杂度与 sophistication</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  blockquote { margin: 1.2rem 0; padding: .2rem 0 .2rem 1rem; border-left: 2px solid var(--rule); color: var(--muted); font-style: italic; }
+  .tp-table td, .tp-table th { font-size: .86rem; }
+</style>
+</head>
+<body>
+<main>
+
+<p class="kicker">第 4 课 · 复杂动力学第一定律</p>
+<h1>最短程序，与程序里「不随机」的那一半</h1>
+<p class="subtitle">Kolmogorov 复杂度为什么量不出「有趣」，以及 sophistication 怎样把一段描述拆成模型和噪声</p>
+
+<p>第 3 课的结论是：压缩长度能分开「有规律」和「随机」，但随机串的压缩长度最大，而随机串一点也不有趣。Aaronson 说，Kolmogorov 本人在 1970 年代就注意到了同一件事<sup class="cite"><a href="#src1">[1]</a></sup>：</p>
+
+<blockquote>A uniformly random string, he said, has close-to-maximal Kolmogorov complexity, but it's also one of the <em>least</em> "complex" or "interesting" strings imaginable. After all, we can describe essentially everything you'd ever want to know about the string by saying "it's random!"</blockquote>
+
+<p>这一课先把压缩长度背后的理想对象 K(x) 讲严格，证明它的两个基本事实，再按 Aaronson 原文定义 sophistication：一个想要「两头都低、中间才高」的量。</p>
+
+<p class="win"><strong>本课收获：</strong>你能用计数论证证明「绝大多数串不可压缩」，用 Berry 悖论证明 K 不可计算，并能对给定的串写出两段式描述、算出模型部分和下标部分各要多少位。</p>
+
+<h2>1　定义：K(x) 是输出 x 的最短程序长度</h2>
+
+<p>固定一种「图灵通用」的编程语言 U。串 x 的 Kolmogorov 复杂度定义为<sup class="cite"><a href="#src1">[1]</a></sup><sup class="cite"><a href="#src2">[2]</a></sup>：</p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">K<sub>U</sub>(x) = min { |p| : 程序 p 在 U 上运行后输出 x 并停机 }</span>　　单位：bit</p></div>
+
+<p>两条马上能看出来的性质：</p>
+<ul>
+<li><strong>上界。</strong><span class="mono">K(x) ≤ |x| + c</span>：程序「print "x"」就输出 x，它的长度是 x 本身加上一段固定的外壳 c。</li>
+<li><strong>不变性定理。</strong>换一种通用语言 V，<span class="mono">|K<sub>U</sub>(x) − K<sub>V</sub>(x)| ≤ c<sub>UV</sub></span>，常数与 x 无关。理由：在 U 里写一个 V 的解释器，长度固定为 c；任何 V 程序前面接上这个解释器，就成了 U 程序。反方向同理。所以我们通常省掉下标，写 K(x)。Aaronson 说的「the exact choice can be shown not to matter much」就是这条定理<sup class="cite"><a href="#src1">[1]</a></sup>。</li>
+</ul>
+
+<p>K 小，表示 x 有很短的描述，即有规律。全 0 串 <span class="mono">0ⁿ</span> 只要「打印 n 个 0」，长度约 log₂ n + c。第 1 课的 Rule 30 也是一例：100 个格子演化 t 步之后的那一行，看起来很乱，但「从中间一个 1 开始跑 Rule 30 共 t 步」这段描述只要一个固定长度的程序加上 t 这个数，约 log₂ t + c 位。</p>
+
+<h2>2　证明：绝大多数串不可压缩</h2>
+
+<p>称 x 为 <strong>k-可压缩的</strong>，如果 <span class="mono">K(x) &lt; |x| − k</span>。下面的论证只用到「一个程序最多输出一个串」。</p>
+
+<div class="proof">
+<p><strong>数程序。</strong>长度为 0, 1, …, n−k−1 的二进制程序一共有 <span class="mono">2⁰ + 2¹ + … + 2ⁿ⁻ᵏ⁻¹ = 2ⁿ⁻ᵏ − 1</span> 个。</p>
+<p><strong>数串。</strong>每个程序最多输出一个串，所以满足 <span class="mono">K(x) &lt; n − k</span> 的长度为 n 的串，最多 <span class="mono">2ⁿ⁻ᵏ − 1</span> 个。</p>
+<p><strong>比例。</strong>长度为 n 的串共 2ⁿ 个，其中 k-可压缩的不到 <span class="mono">2ⁿ⁻ᵏ ⁄ 2ⁿ = 2⁻ᵏ</span>。</p>
+<p><strong>两个推论。</strong>取 k = 0：长度 n 的串里至少有一个满足 <span class="mono">K(x) ≥ n</span>，一位都压不掉。取 k = 10：超过 1 − 2⁻¹⁰ ≈ 99.9% 的串连 10 位都压不掉。<span class="qed">∎</span></p>
+</div>
+
+<p>这就是「随机」的算法定义：一个串不可压缩，就说它是随机的。注意论证里没有用到任何概率，只是在数个数。</p>
+
+<h2>3　证明：K 不可计算</h2>
+
+<p>既然 K 这么好，为什么 notebook 和 Aaronson 都改用 gzip？因为根本不存在一个程序，输入 x 就输出 K(x)。证明是 Berry 悖论的形式化：「不能用少于十八个字描述的最小正整数」这句话本身不到十八个字<sup class="cite"><a href="#src2">[2]</a></sup>。</p>
+
+<div class="proof">
+<p><strong>假设</strong>有程序 Q 能算 K(x)，Q 的长度是固定的常数。</p>
+<p><strong>构造</strong>程序 P<sub>m</sub>：按长度从短到长、同长按字典序枚举所有串 x，对每个 x 调用 Q，输出<em>第一个</em>满足 <span class="mono">K(x) ≥ m</span> 的 x 后停机。由第 2 节（k = 0），长度为 m 的串里一定有这样的 x，所以 P<sub>m</sub> 必然停机。</p>
+<p><strong>量长度。</strong>P<sub>m</sub> 由 Q、固定的枚举外壳和数 m 组成，长度 <span class="mono">≤ c + log₂ m</span>，c 是与 m 无关的常数。</p>
+<p><strong>矛盾。</strong>P<sub>m</sub> 输出的 x 满足 <span class="mono">K(x) ≥ m</span>（按 P<sub>m</sub> 的选法），又满足 <span class="mono">K(x) ≤ |P<sub>m</sub>| ≤ c + log₂ m</span>（P<sub>m</sub> 就是输出 x 的一个程序）。于是 <span class="mono">m ≤ c + log₂ m</span>。但 m − log₂ m 随 m 无界增长，取 m 足够大就不成立。所以 Q 不存在。<span class="qed">∎</span></p>
+</div>
+
+<p>能算的只是<strong>上界</strong>：任何一个能还原 x 的压缩器，它的输出长度加上解压器长度，都 ≥ K(x)。压缩器越好，上界越紧，但永远不知道离 K 还差多少。Aaronson 在文末正是这样建议的：用 gzip 文件大小「作为 K(x) 的粗糙替身」<sup class="cite"><a href="#src1">[1]</a></sup>。</p>
+
+<h3>替身差多远：两个实测</h3>
+
+<p>下面的数字我用 Python 的 <code>zlib.compress(x, 9)</code> 实测过（随机字节用 <code>random.Random(0).randbytes</code> 生成）：</p>
+
+<table class="tp-table">
+<tr><th class="l">输入</th><th>原长（字节）</th><th>压缩后（字节）</th></tr>
+<tr><td class="l">全 0</td><td>10 000</td><td>33</td></tr>
+<tr><td class="l">随机字节</td><td>10 000</td><td>10 011</td></tr>
+<tr><td class="l">同一段随机字节拼两遍</td><td>20 000</td><td>10 163</td></tr>
+<tr><td class="l">Rule 30，宽 4001，第 2000 步的那一行（每 8 格打包成 1 字节）</td><td>501</td><td>512</td></tr>
+</table>
+
+<p>前三行符合理论：随机串压不动，压缩后反而多了 11 字节的外壳；重复一遍几乎不增加长度，因为第二遍可以写成「把前面那段再抄一次」。第四行是替身的盲区：zlib 压不动这一行，但它的 K 很小，只要 Rule 30 的规则、宽度 4001 和 t = 2000 这几个数，后者约 11 位。zlib 只会找重复片段，看不出「这是某条简单规则跑出来的」。</p>
+
+<h2>4　sophistication：只数描述里「不随机」的那部分</h2>
+
+<p>K 把规律和噪声算在一起，随机串的 K 最大。Kolmogorov 的想法是把描述拆成两段：先说「x 属于集合 S」（模型），再说「是 S 里的第几个」（下标）。下标最多 <span class="mono">⌈log₂|S|⌉</span> 位。如果 x 在 S 里毫无特殊之处，下标这一段就是纯噪声，「结构」全在模型那一段。</p>
+
+<p>Aaronson 的定义如下<sup class="cite"><a href="#src1">[1]</a></sup>。设 S 是一个 n 位串的集合，K(S) 是输出 S 全部元素后停机的最短程序长度；K(x|S) 是在「可以查询某个串是否属于 S」的条件下输出 x 的最短程序长度。则：</p>
+
+<blockquote>let the <em>sophistication</em> of x, or Soph(x), be the smallest possible value of K(S), over all sets S such that<br>1. x ∈ S; and<br>2. K(x|S) ≥ log₂(|S|) − c, for some constant c. (In other words, one can distill all the "nonrandom" information in x just by saying that x belongs to S.)</blockquote>
+
+<p>条件 2 说的是：知道 S 以后，x 已经没法比「直接报下标」描述得更短了。也就是说，x 是 S 里一个「典型」的、看起来随机的成员，没有剩下的规律可挖。</p>
+
+<p>用三个 n 位的串看看它对两头的表现：</p>
+
+<table class="tp-table">
+<tr><th class="l">x</th><th class="l">选的 S</th><th>K(S)（模型）</th><th>log₂|S|（下标）</th></tr>
+<tr><td class="l">全 0：<span class="mono">0ⁿ</span></td><td class="l">单点集 {x}</td><td>≈ log₂ n</td><td>0</td></tr>
+<tr><td class="l">均匀随机</td><td class="l">全体 {0,1}ⁿ</td><td>≈ log₂ n</td><td>n</td></tr>
+<tr><td class="l">前一半全 0、后一半随机</td><td class="l">{0<sup>n/2</sup>y : y ∈ {0,1}<sup>n/2</sup>}</td><td>≈ log₂ n</td><td>n/2</td></tr>
+</table>
+
+<p>前两行就是 Aaronson 说的：简单串和随机串的 sophistication 都很小。第一行条件 2 自动成立（log₂|S| = 0）；第二行成立是因为随机的 x 在 {0,1}ⁿ 里本来就是典型元素。</p>
+
+<p>第三行要多想一步。直觉上它「一半有结构、一半随机」，像是介于两端之间，但它的 sophistication 照样只有 log₂ n 这个量级：模型「前一半是 0」很短，剩下的全是噪声。<strong>这说明 sophistication 高不等于「有结构的部分多」，而是「描述这些结构本身就需要很多位」</strong>。随便造的例子很难做到这一点。Aaronson 提到，「到底存不存在 sophistication 高的串」曾是 Kolmogorov 提出的问题，1980 年代初才由 Alexander Shen 用对角化构造肯定地回答<sup class="cite"><a href="#src1">[1]</a></sup>。</p>
+
+<div class="box"><p style="margin:0">第 5 课的伏笔：Aaronson 紧接着指出，sophistication 用在动力系统上仍然失效。确定性系统 t 步后的状态，用「初态 + 规则 + t」就能描述，所以 Soph ≤ log₂ t + c，永远长不大<sup class="cite"><a href="#src1">[1]</a></sup>。修补办法是加资源限制，这就是 complextropy。</p></div>
+
+<h2>5　手算：两段式描述要多少位</h2>
+
+<p>一类常见的模型是「恰有 k 个 1 的 n 位串」。这个集合大小是 C(n, k)，下标要 log₂ C(n, k) 位。拖动滑块，对照第 2 课的 n·h(k/n)：两者很接近，这不是巧合，Shannon 熵就是「典型集合下标长度」的每位平均值。</p>
+
+<div class="tp-slider" data-n="1000"></div>
+
+<div class="exercise">
+<h3>练习 A：下标部分</h3>
+<p>x 是 100 位的串，恰好有 3 个 1，位置看起来是随机的。取 S = {恰有 3 个 1 的 100 位串}，下标部分需要多少位？保留 1 位小数。</p>
+<div class="num-q" data-answer="17.3" data-tol="0.1"
+     data-hint="|S| = C(100, 3) = 100·99·98 ⁄ 6，再取 log₂。"
+     data-explain="|S| = C(100, 3) = 161 700，log₂ 161 700 ≈ 17.30 位。逐位照抄要 100 位。"></div>
+<p>再想一想：模型部分要说清楚 n = 100 和 k = 3，大约多少位？两段加起来，比 100 位短多少？</p>
+<details><summary>参考思路</summary>
+<p>写下 n 和 k 大约要 log₂ 100 + log₂ 3 ≈ 6.6 + 1.6 位，再加上一段固定外壳 c。总长约 17.3 + 8.2 + c ≈ 25.5 + c 位，远小于 100 位。这时模型部分只有 O(log n) 位，所以这个 x 的 sophistication 也很低。</p>
+</details>
+</div>
+
+<h2>6　回想测验</h2>
+<p class="muted">凭记忆作答，先别往上翻。</p>
+
+<div class="quiz" data-answer="2">
+<p class="q">1. 长度为 n 的串中，满足 K(x) &lt; n − k 的最多有多少个？</p>
+<ol><li>2ⁿ⁻ᵏ</li><li>2ⁿ − 2ᵏ</li><li>2ⁿ⁻ᵏ − 1</li><li>n − k</li></ol>
+<p class="explain">长度 0 到 n−k−1 的程序一共 2ⁿ⁻ᵏ − 1 个，每个最多输出一个串。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">2. Berry 式证明里，程序 P<sub>m</sub> 的长度为什么只有 c + log₂ m？</p>
+<ol><li>它只需要存下数 m，其余部分（含假想的 Q）长度固定</li><li>它输出的 x 本身很短</li><li>m 总是 2 的幂</li><li>它不需要停机</li></ol>
+<p class="explain">P<sub>m</sub> 里唯一随 m 变化的是 m 的二进制写法，约 log₂ m 位。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">3. 不变性定理说的是？</p>
+<ol><li>对所有 x，K(x) = |x|</li><li>K(x) 与 x 的排列顺序无关</li><li>任何压缩器的输出长度都等于 K(x)</li><li>换一种通用语言，K(x) 最多相差一个与 x 无关的常数</li></ol>
+<p class="explain">常数就是用一种语言写另一种语言解释器的长度。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">4. 均匀随机的 n 位串，sophistication 为什么很小？</p>
+<ol><li>因为它的 K(x) 很小</li><li>可以取 S = {0,1}ⁿ：模型只要 O(log n) 位，x 又是 S 的典型元素</li><li>因为条件 2 对随机串不成立</li><li>因为随机串不存在</li></ol>
+<p class="explain">随机串的 K 接近 n，但这 n 位全在下标那一段，模型部分几乎为零。</p>
+</div>
+
+<div class="quiz" data-answer="2">
+<p class="q">5. 第 3 节表格里，Rule 30 那一行 zlib 压不动，说明什么？</p>
+<ol><li>它的 K 接近 501 字节</li><li>Rule 30 产生的是真正的随机串</li><li>zlib 给的只是 K 的上界，可能离 K 很远</li><li>zlib 有 bug</li></ol>
+<p class="explain">它的 K 不超过「规则 + 宽度 + 步数」的描述长度，只是 zlib 看不出来。</p>
+</div>
+
+<h2>7　编程练习</h2>
+
+<div class="exercise">
+<h3>练习 B：用 zlib 当 K 的替身</h3>
+<p>本题只用标准库，不需要 torch。写一个函数 <code>C(b: bytes) -&gt; int</code>，返回 <code>zlib.compress(b, 9)</code> 的长度，然后验证三件事。</p>
+<pre><code>import random, zlib
+
+rng = random.Random(0)
+x = rng.randbytes(10_000)
+
+assert C(x) &gt;= len(x)                 # 随机串压不动
+assert C(x + x) - C(x) &lt; 200          # 重复一遍几乎不增加长度
+assert C(bytes(10_000)) &lt; 100         # 全 0 几乎压没了
+
+y = rng.randbytes(100_000)
+print(C(y + y) / C(y))                # 猜一猜，再运行</code></pre>
+<p>最后一行的比值是多少？为什么同样是「拼两遍」，10 000 字节时几乎不增加，100 000 字节时却几乎翻倍？</p>
+<details><summary>参考解答（写完再看）</summary>
+<pre><code>def C(b: bytes) -&gt; int:
+    return len(zlib.compress(b, 9))</code></pre>
+<p>我实测：<code>C(x) = 10011</code>，<code>C(x + x) = 10163</code>，<code>C(bytes(10_000)) = 33</code>；最后一行约 <code>2.0</code>（200 071 ⁄ 100 041）。</p>
+<p>原因是 zlib（DEFLATE）只在最近 32 KiB 的窗口里找重复片段。第二遍 y 开头时，第一遍 y 的开头已经在 100 000 字节之前，超出窗口，看不见了。理想的 K 没有这种限制：<span class="mono">K(yy) ≤ K(y) + c</span>，因为「把 y 打印两遍」只多一段固定外壳。这又是替身和 K 之间的一道缝，第 7 课用压缩长度估复杂度时要记得。</p>
+</details>
+</div>
+
+<h2>延伸阅读</h2>
+<p><strong>主读：</strong>Aaronson 原文第 2–3 页，从「After thinking on and off about these questions」读到 sophistication 失效的那一段<sup class="cite"><a href="#src1">[1]</a></sup>。本地 PDF：<a href="../../../papers_pdf/06_complexodynamics.pdf">papers_pdf/06_complexodynamics.pdf</a>。</p>
+<p><strong>选读：</strong>Shen、Uspensky、Vereshchagin，<em>Kolmogorov Complexity and Algorithmic Randomness</em>：引言里的「Non-computability of C and Berry's paradox」（p. 9）、第 1 章「Plain Kolmogorov complexity」，以及第 14 章「Algorithmic statistics」的 14.3「Two-part descriptions」<sup class="cite"><a href="#src2">[2]</a></sup>。本地 PDF：<a href="../../../papers_pdf/26_kolmogorov_complexity.pdf">papers_pdf/26_kolmogorov_complexity.pdf</a>。</p>
+
+<p class="ask box plain">有不清楚的地方，直接在终端问我。比如「条件 2 里的常数 c 到底是谁定的」，或者「为什么下标恰好是 log₂|S| 位」。下一课讲 complextropy：为什么 Aaronson 要在<strong>两个地方</strong>同时加上计算时间的限制。</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">S. Aaronson, "The First Law of Complexodynamics", <em>The Quantum Times</em> 6(2), 2011, pp. 1–3（博客版 <a href="https://scottaaronson.blog/?p=762">Shtetl-Optimized, 2011-09-23</a>）：Kolmogorov 的观察、Soph(x) 的定义、Shen 的构造、sophistication 对动力系统失效的论证。</li>
+<li id="src2">A. Shen, V. A. Uspensky, N. Vereshchagin, <em>Kolmogorov Complexity and Algorithmic Randomness</em>, Mathematical Surveys and Monographs 220, AMS, 2017：K 的定义与不变性、不可计算性与 Berry 悖论、两段式描述。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0003-measure-traps.html">← 第 3 课：度量的陷阱</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0005-complextropy-resource-bounds.html">下一课：complextropy →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../assets/l4-twopart.js"></script>
+</body>
+</html>

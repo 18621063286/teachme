@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>复杂动力学术语表</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+<p class="kicker">参考 · 术语表</p>
+<h1>术语表</h1>
+<p class="subtitle">所有课程统一使用下列译法。notebook 原文是繁体，括号里注明原词。</p>
+
+<table style="width:100%">
+<tr><th class="l">术语</th><th class="l">英文 / notebook 原词</th><th class="l">定义</th><th class="l">首见</th></tr>
+<tr><td class="l">元胞自动机</td><td class="l">cellular automaton（細胞自動機）</td><td class="l">由一排（或一网格）离散格子组成，每格按同一条局部规则、同步更新状态的离散模型。</td><td class="l"><a href="../lessons/0001-rule30-from-number-to-tensor.html">第 1 课</a></td></tr>
+<tr><td class="l">初等元胞自动机</td><td class="l">elementary CA (ECA)</td><td class="l">一维、状态取 0/1、邻域为左中右三格的元胞自动机，共 2⁸ = 256 条规则。</td><td class="l">第 1 课</td></tr>
+<tr><td class="l">邻域</td><td class="l">neighborhood</td><td class="l">决定一个格子下一刻状态的那组格子；ECA 中为 (l, c, r)。</td><td class="l">第 1 课</td></tr>
+<tr><td class="l">规则号</td><td class="l">rule number</td><td class="l">把 8 种邻域的输出按 k = 4l+2c+r 排成二进制得到的整数；第 k 位就是邻域 k 的新状态。</td><td class="l">第 1 课</td></tr>
+<tr><td class="l">周期边界</td><td class="l">periodic boundary（週期性邊界）</td><td class="l">首尾相接，最左格的左邻居是最右格。<code>torch.roll</code> 天然实现它。</td><td class="l">第 1 课</td></tr>
+<tr><td class="l">复制边界</td><td class="l">replicate padding</td><td class="l">越界处用最近的边缘值填充；notebook 咖啡扩散所用。与周期边界对照。</td><td class="l">第 1 课（预告）</td></tr>
+<tr><td class="l">循环移位</td><td class="l"><code>torch.roll</code></td><td class="l"><code>roll(x, s)[i] = x[i − s]</code>（下标取模）。s = 1 取左邻居，s = −1 取右邻居。</td><td class="l">第 1 课</td></tr>
+<tr><td class="l">高级索引</td><td class="l">advanced (integer) indexing</td><td class="l">用整数张量当下标，<code>table[idx]</code> 返回与 <code>idx</code> 同形状的张量，可以一次查完整行。</td><td class="l">第 1 课</td></tr>
+<tr><td class="l">复杂度（直观义）</td><td class="l">complexity / complextropy</td><td class="l">Aaronson 要形式化的「有趣结构」的多少：初态和终态都低，中间高。严格定义见后续课程。</td><td class="l">第 1 课（动机）</td></tr>
+<tr><td class="l">熵</td><td class="l">entropy（熵）</td><td class="l">封闭系统中单调不减的量。Shannon 熵的定义与推导见第 2 课。</td><td class="l">第 1 课（动机）</td></tr>
+<tr><td class="l">惊讶度</td><td class="l">surprisal / self-information</td><td class="l">概率为 p 的结果发生时的信息量 −log₂ p。必然事件为 0。</td><td class="l"><a href="../lessons/0002-shannon-entropy.html">第 2 课</a></td></tr>
+<tr><td class="l">Shannon 熵</td><td class="l">Shannon entropy（Shannon 熵）</td><td class="l">惊讶度的期望 H = −Σ pᵢ log₂ pᵢ，单位 bit；约定 0·log 0 = 0。n 种结果时 H ≤ log₂ n，当且仅当均匀分布取等号。</td><td class="l">第 2 课</td></tr>
+<tr><td class="l">二元熵函数</td><td class="l">binary entropy function</td><td class="l">h(p) = −p log₂ p − (1−p) log₂(1−p)；严格凹，h(1/2) = 1 为最大值，h(p) = h(1−p)。</td><td class="l">第 2 课</td></tr>
+<tr><td class="l">边缘分布</td><td class="l">marginal distribution</td><td class="l">只看单个格子取值、不看位置关系得到的分布。notebook 的 <code>measure_entropy</code> 量的就是它的熵，所以打乱一行熵不变。</td><td class="l">第 2 课</td></tr>
+<tr><td class="l">沿维度归约</td><td class="l"><code>dim=</code> 参数</td><td class="l"><code>x.mean(dim=1)</code>、<code>x.sum(dim=1)</code> 等沿指定维度运算，该维被消掉：(T, N) → (T,)。</td><td class="l">第 2 课</td></tr>
+<tr><td class="l">转换次数</td><td class="l">transitions（轉換次數），<code>measure_spatial_complexity</code></td><td class="l">相邻两格取值不同的对数 T = Σ|xᵢ₊₁ − xᵢ|，最多 N − 1。只看长度为 2 的窗口，给交替 0101 打满分；随机行期望 (N−1)/2。</td><td class="l"><a href="../lessons/0003-measure-traps.html">第 3 课</a></td></tr>
+<tr><td class="l">压缩长度</td><td class="l">compressed length（gzip / zlib）</td><td class="l">把状态交给无损压缩器后的输出字节数。是 Kolmogorov 复杂度 K(x) 的可计算上界，可能很松；对随机串最大，更接近熵而非复杂度。</td><td class="l">第 3 课</td></tr>
+<tr><td class="l">置换不变</td><td class="l">permutation invariance</td><td class="l">任意打乱各格位置后值不变。单格熵 H 具有此性质，所以看不见空间结构。</td><td class="l">第 3 课</td></tr>
+<tr><td class="l">期望的线性性</td><td class="l">linearity of expectation</td><td class="l">E[X+Y] = E[X] + E[Y]，不要求独立。用于证明随机行 E[T] = (N−1)/2。</td><td class="l">第 3 课</td></tr>
+<tr><td class="l">不可压缩性（计数论证）</td><td class="l">incompressibility (counting argument)</td><td class="l">长度 n 的串中，能被任一固定无损压缩器压到少于 n − k 位的，占比小于 2⁻ᵏ。</td><td class="l">第 3 课</td></tr>
+<tr><td class="l">Kolmogorov 复杂度</td><td class="l">Kolmogorov complexity K(x)</td><td class="l">在固定的通用语言里输出 x 并停机的最短程序长度。K(x) ≤ |x| + c；不可计算，压缩长度只给出上界。</td><td class="l"><a href="../lessons/0004-kolmogorov-sophistication.html">第 4 课</a></td></tr>
+<tr><td class="l">不变性定理</td><td class="l">invariance theorem</td><td class="l">换一种通用语言，K(x) 最多变化一个与 x 无关的常数（即解释器的长度）。</td><td class="l">第 4 课</td></tr>
+<tr><td class="l">不可压缩串</td><td class="l">incompressible string</td><td class="l">K(x) ≥ |x| 的串，是「随机」的算法定义。长度为 n 的串中，K(x) &lt; n − k 的不到 2⁻ᵏ。</td><td class="l">第 4 课</td></tr>
+<tr><td class="l">两段式描述</td><td class="l">two-part description</td><td class="l">先描述集合 S（模型），再给出 x 在 S 里的下标（约 log₂|S| 位）。</td><td class="l">第 4 课</td></tr>
+<tr><td class="l">sophistication</td><td class="l">Soph(x)</td><td class="l">在所有满足 x ∈ S 且 K(x|S) ≥ log₂|S| − c 的集合 S 中，K(S) 的最小值（Aaronson 博客版）。简单串和随机串都低。2014 年咖啡论文用的是 Koppel 的变体，多一个条件 K(S) + log₂|S| ≤ K(x) + c。</td><td class="l">第 4 课</td></tr>
+<tr><td class="l">资源受限 Kolmogorov 复杂度</td><td class="l">resource-bounded Kolmogorov complexity, Kᵀ(x)</td><td class="l">在时间 T(n) 内输出 x 的最短程序长度；总有 Kᵀ(x) ≥ K(x)。确定性系统「初态 + 规则 + t」的短描述要跑约 t 步，会被时间上界排除。</td><td class="l"><a href="../lessons/0005-complextropy-resource-bounds.html">第 5 课</a></td></tr>
+<tr><td class="l">complextropy</td><td class="l">complextropy（Aaronson 2011 的用词）</td><td class="l">在 n log n 时间内、能输出集合 S 上近似均匀样本的最短程序的长度。要求 x ∈ S，并且任何 n log n 时间、可以向 S 要样本的程序，输出 x 都至少需要 log₂|S| − c 位。采样器和重构器两处都必须加效率约束。</td><td class="l">第 5 课</td></tr>
+<tr><td class="l">自定界编码</td><td class="l">self-delimiting code</td><td class="l">读者能自己判断在哪里结束的编码。例如先把 t 的位数 ℓ 每位写两遍，加分隔符 01，再写 t，总长 log₂ t + O(log log t)。</td><td class="l">第 5 课</td></tr>
+<tr><td class="l">表观复杂度</td><td class="l">apparent complexity</td><td class="l">K(f(x))，f 是粗粒化或平滑函数。实验中用粗粒化分档后数组的 gzip 字节数估计；细粒度数组的 gzip 字节数则估计熵。相当于把 sophistication 的模型固定为 S<sub>f,x</sub> = {y : f(y) = f(x)}。</td><td class="l">第 5 课（第 7 课实操）</td></tr>
+<tr><td class="l">拉普拉斯算子 / 五点核</td><td class="l">Laplacian, 5-point stencil（Laplacian 卷積）</td><td class="l">∇²u 的离散近似 Lu = 上+下+左+右−4·中，对应核 [[0,1,0],[1,−4,1],[0,1,0]]；误差 O(h²)。</td><td class="l"><a href="../lessons/0006-laplacian-conv2d.html">第 6 课</a></td></tr>
+<tr><td class="l">显式欧拉格式</td><td class="l">explicit Euler（顯式歐拉）</td><td class="l">u ← u + r·Lu，r = DΔt/h²（notebook 的 diffusion_rate）。二维稳定条件 r ≤ 1/4。</td><td class="l">第 6 课</td></tr>
+<tr><td class="l">最大值原理</td><td class="l">maximum principle</td><td class="l">r ≤ 1/4 时新值是五个旧值的凸组合，不会超出它们的最小值和最大值。</td><td class="l">第 6 课</td></tr>
+<tr><td class="l">von Neumann 稳定性分析</td><td class="l">von Neumann analysis</td><td class="l">代入单频波求每步放大倍数 g = 1 − 4r[sin²(α/2)+sin²(β/2)]；棋盘格模态 g = 1−8r 最先失控。</td><td class="l">第 6 课</td></tr>
+<tr><td class="l">零通量边界</td><td class="l">Neumann / zero-flux boundary</td><td class="l">穿过边界的通量为零；replicate 填充是它的离散版本，保证总量守恒。</td><td class="l">第 6 课</td></tr>
+<tr><td class="l">互相关</td><td class="l">cross-correlation</td><td class="l">核不翻转、直接对齐相乘求和；PyTorch 的 conv2d 实际算的是它。对称核时与卷积相同。</td><td class="l">第 6 课</td></tr>
+<tr><td class="l">(N, C, H, W)</td><td class="l"><code>F.conv2d</code> 输入布局</td><td class="l">批大小、通道、高、宽；核为 (输出通道, 输入通道, kH, kW)。<code>unsqueeze(0)</code> 在最前面补长度为 1 的维。</td><td class="l">第 6 课</td></tr>
+<tr><td class="l">粗粒化</td><td class="l">coarse-graining</td><td class="l">每格换成以它为中心的 g×g 窗口平均，窗口出界部分不计入（<code>avg_pool2d(..., count_include_pad=False)</code>），再分成少数几档。用来抹掉随机细节。</td><td class="l"><a href="../lessons/0007-coffee-automaton.html">第 7 课</a></td></tr>
+<tr><td class="l">交互 / 非交互咖啡自动机</td><td class="l">interacting / non-interacting coffee automaton</td><td class="l">交互：每步交换一对相邻且不同的格子，一格一个粒子。非交互：每个奶油粒子独立随机游走，可叠加。</td><td class="l">第 7 课</td></tr>
+<tr><td class="l">分档伪影</td><td class="l">thresholding artifact</td><td class="l">平滑渐变恰好落在档位分界时，微小噪声让格子在两档间跳动，被压缩器误计为结构。论文用七档 + 按行多数 ±1 调整修正。</td><td class="l">第 7 课</td></tr>
+</table>
+
+<nav class="pager"><a href="eca-cheatsheet.html">速查：初等元胞自动机</a><span><a href="../lessons/0001-rule30-from-number-to-tensor.html">第 1 课</a> · <a href="../lessons/0007-coffee-automaton.html">第 7 课</a></span></nav>
+</main>
+</body>
+</html>

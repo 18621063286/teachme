@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拉普拉斯核与 conv2d</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+.l6-canvas { display: block; width: 100%; max-width: 18rem; height: auto; image-rendering: pixelated; border: 1px solid var(--rule); margin: .6rem 0; }
+.l6-controls { font-family: var(--sans); font-size: .88rem; display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; align-items: center; }
+.l6-controls label { display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
+.l6-controls input[type="range"] { width: 12rem; flex: 0 1 auto; }
+.l6-controls input[type="checkbox"] { accent-color: var(--accent); }
+table.l6-nbhd { margin: .6rem 0; }
+table.l6-nbhd td { width: 3rem; height: 2.2rem; border: 1px solid var(--rule); }
+table.l6-nbhd td:empty { border: 0; }
+table.l6-nbhd td.center { background: var(--accent-soft); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+
+<p class="kicker">第 6 课 · 复杂动力学第一定律</p>
+<h1>一个 3×3 的核，就是扩散方程</h1>
+<p class="subtitle">从 Taylor 展开推出五点拉普拉斯，再看 <code>F.conv2d</code> 怎样一次更新整张网格，以及奶油为什么一滴不少</p>
+
+<p>notebook 第 3 节把咖啡杯换成了一张 50×50 的网格：中间 10×10 的方块是奶油（浓度 1），其余是咖啡（浓度 0）。每一步，奶油向四周散开一点。Aaronson 用咖啡杯讲「复杂度先升后降」：刚倒进去时界限分明，最后混得均匀，都很简单，中间那些卷须状的图案才复杂<sup class="cite"><a href="#src4">[4]</a></sup>。要测这个过程，先得有这个过程。notebook 的实现只有几行：</p>
+
+<pre><code>kernel = torch.tensor(
+    [[0, 1, 0], [1, -4, 1], [0, 1, 0]],
+    dtype=torch.float32,
+).unsqueeze(0).unsqueeze(0)
+...
+for _ in range(steps):
+    padded = F.pad(current, (1, 1, 1, 1), mode="replicate")
+    laplacian = F.conv2d(padded, kernel)
+    current = torch.clamp(current + diffusion_rate * laplacian, 0, 1)</code></pre>
+
+<p class="win"><strong>本课收获：</strong>你能从扩散方程推出这个 3×3 核和更新式，证明 <span class="mono">r ≤ 1/4</span> 时格式稳定，并证明 replicate 边界下奶油总量严格守恒。你还能说清 <code>conv2d</code> 每一步的张量形状，并用 <code>torch.roll</code> 写出同一个拉普拉斯的周期边界版本。</p>
+
+<h2>1　从扩散方程到五点核</h2>
+
+<p>浓度 u(x, y, t) 的扩散方程是 <span class="mono">∂u/∂t = D ∇²u</span>，其中 <span class="mono">∇²u = ∂²u/∂x² + ∂²u/∂y²</span>，D 是扩散系数<sup class="cite"><a href="#src1">[1]</a></sup>。直观上，∇²u 衡量「这一点比周围平均值低多少」：比邻居低就流进来，比邻居高就流出去。</p>
+
+<p>网格上没有导数，只有格点值。设格距为 h，记 <span class="mono">uᵢ = u(x + ih)</span>。先在一维推导二阶导数的近似：</p>
+
+<div class="proof">
+<p><strong>Taylor 展开。</strong>在 x 处展开到四阶：</p>
+<p style="text-align:center"><span class="mono">u(x ± h) = u ± h u′ + (h²/2) u″ ± (h³/6) u‴ + O(h⁴)</span></p>
+<p><strong>两式相加。</strong>奇数阶项正负抵消：<span class="mono">u(x+h) + u(x−h) = 2u + h² u″ + O(h⁴)</span>。</p>
+<p><strong>移项除以 h²。</strong></p>
+<p style="text-align:center"><span class="mono">(uᵢ₊₁ − 2uᵢ + uᵢ₋₁) ⁄ h² = u″(x) + O(h²)</span></p>
+<p>这就是二阶中心差分，误差随 h² 缩小，所以叫二阶精度。<span class="qed">∎</span></p>
+</div>
+
+<p>二维时，x 方向和 y 方向各用一次，再相加：</p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">∇²u ≈ (上 + 下 + 左 + 右 − 4·中) ⁄ h²</span></p></div>
+
+<p>把每个格点的系数按位置摆好，就是 notebook 的核：</p>
+
+<table style="margin-left:auto; margin-right:auto">
+<tr><td class="mono">0</td><td class="mono">1</td><td class="mono">0</td></tr>
+<tr><td class="mono">1</td><td class="mono"><strong>−4</strong></td><td class="mono">1</td></tr>
+<tr><td class="mono">0</td><td class="mono">1</td><td class="mono">0</td></tr>
+</table>
+
+<p>记 <span class="mono">Lu = 上 + 下 + 左 + 右 − 4·中</span>（不除以 h²）。时间方向用最简单的显式欧拉法：<span class="mono">uⁿ⁺¹ = uⁿ + Δt · D ∇²uⁿ</span>。代入上式：</p>
+
+<div class="box"><p style="text-align:center; margin:0"><span class="mono">u ← u + r · Lu</span>，　其中 <span class="mono">r = D Δt ⁄ h²</span></p></div>
+
+<p>notebook 的 <code>diffusion_rate</code> 就是这个 r，一个没有量纲的数。D、Δt、h 三者只通过 r 起作用。</p>
+
+<div class="exercise">
+<h3>练习 A：手算一格</h3>
+<p>下面是 notebook 设置下 t = 1 时，方块上边缘中点那一格（第 20 行第 25 列）和它的四个邻居。r = 0.2。算出 Lu 和 t = 2 时这一格的值。</p>
+<div class="l6-calc" data-c="0.8" data-up="0.2" data-down="1" data-left="0.8" data-right="0.8" data-r="0.2"></div>
+</div>
+
+<h2>2　<code>F.conv2d</code>：一次算出整张网格的 Lu</h2>
+
+<p>第 1 课用 <code>torch.roll</code> 一次拿到所有格子的邻居。这里换了个工具：卷积。<code>F.conv2d</code> 把 3×3 的核在网格上滑动，每到一个位置，就把核与覆盖的 9 个值逐个相乘再求和<sup class="cite"><a href="#src2">[2]</a></sup>。用上面的核，算出来正好是那一格的 Lu。</p>
+
+<p>严格说，PyTorch 的卷积层算的是互相关：核不翻转，直接对齐相乘<sup class="cite"><a href="#src2">[2]</a></sup>。数学里的卷积要先把核旋转 180°。这个核上下左右都对称，翻不翻转结果都一样，所以这里不用操心。</p>
+
+<p>形状是最容易出错的地方。<code>F.conv2d</code> 要求输入是四维的 <span class="mono">(N, C, H, W)</span>：批大小、通道数、高、宽；核是 <span class="mono">(输出通道, 输入通道, kH, kW)</span><sup class="cite"><a href="#src2">[2]</a></sup>。逐行看：</p>
+
+<table>
+<tr><th class="l">代码</th><th class="l">形状</th><th class="l">说明</th></tr>
+<tr><td class="l"><code>grid</code></td><td class="mono">(50, 50)</td><td class="l">一张网格</td></tr>
+<tr><td class="l"><code>.unsqueeze(0).unsqueeze(0)</code></td><td class="mono">(1, 1, 50, 50)</td><td class="l">在最前面补两个长度为 1 的维：N = 1，C = 1</td></tr>
+<tr><td class="l"><code>kernel</code>（两次 unsqueeze 后）</td><td class="mono">(1, 1, 3, 3)</td><td class="l">1 个输出通道，1 个输入通道</td></tr>
+<tr><td class="l"><code>F.pad(current, (1,1,1,1), mode="replicate")</code></td><td class="mono">(1, 1, 52, 52)</td><td class="l">四周各补一圈</td></tr>
+<tr><td class="l"><code>F.conv2d(padded, kernel)</code></td><td class="mono">(1, 1, 50, 50)</td><td class="l">不补零时输出边长 = 52 − 3 + 1 = 50</td></tr>
+<tr><td class="l"><code>current.squeeze()</code></td><td class="mono">(50, 50)</td><td class="l">去掉所有长度为 1 的维，存进历史</td></tr>
+</table>
+
+<p><code>F.pad</code> 的填充元组从<strong>最后一维</strong>往前写：<span class="mono">(左, 右, 上, 下)</span>，前两个数管宽度 W，后两个管高度 H<sup class="cite"><a href="#src3">[3]</a></sup>。<code>mode="replicate"</code> 用最近的边缘值来填，例如第 0 行的「上邻居」就是它自己。第 1 课测验第 5 题提到过它，下面第 4 节会看到这个选择的物理意义。</p>
+
+<h2>3　稳定性：为什么 r 不能超过 1/4</h2>
+
+<p>把更新式按格点重新整理：</p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">u′ = (1 − 4r)·中 + r·(上 + 下 + 左 + 右)</span></p></div>
+
+<div class="proof">
+<p><strong>最大值原理。</strong>五个系数之和是 (1 − 4r) + 4r = 1。若 0 ≤ r ≤ 1/4，五个系数都非负，u′ 就是五个值的<em>凸组合</em>（加权平均），所以</p>
+<p style="text-align:center"><span class="mono">min(五个值) ≤ u′ ≤ max(五个值)</span></p>
+<p>对每一步、每一格都成立。初值都在 [0, 1] 里，以后就永远在 [0, 1] 里。<span class="qed">∎</span></p>
+</div>
+
+<p>这条证明有一个直接推论：notebook 用 r = 0.2 ≤ 1/4，所以 <code>torch.clamp(…, 0, 1)</code> <strong>从来不会被触发</strong>。我用纯 Python 按 notebook 的设置跑了 50 步，被截断的格子数是 0。r = 0.25 时也是 0。</p>
+
+<p>r &gt; 1/4 时，中心系数 1 − 4r 变成负数，凸组合的论证就失效了。哪种图案最先出问题？用 von Neumann 分析：代入单一频率的波 <span class="mono">uⱼₖ = gⁿ e^{i(αj + βk)}</span>，每一步的放大倍数是<sup class="cite"><a href="#src1">[1]</a></sup></p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">g(α, β) = 1 − 4r·[sin²(α/2) + sin²(β/2)]</span></p></div>
+
+<p>最坏的情况是 α = β = π，也就是相邻格子正负交替的<strong>棋盘格</strong>，这时 g = 1 − 8r。要求 |g| ≤ 1，就得 r ≤ 1/4，与凸组合的结论一致。r = 0.3 时 g = −1.4：棋盘格成分每步放大 1.4 倍，还每步变号。</p>
+
+<p>按 notebook 的设置、不加 clamp 实测：r = 0.3 时第 6 步开始出现明显越界（超出 [0, 1] 超过 0.001），第 50 步最大值约 3.2 万、最小值约 −3.1 万。r = 0.26 时要到第 46 步才看得出来，因为 g = −1.08，增长很慢。</p>
+
+<div class="exercise">
+<h3>练习 B：把 r 调过 1/4</h3>
+<p>下面是一张 24×24 的小网格，中间 8×8 的方块初值为 1。红色表示正值，绿色表示负值，颜色越深绝对值越大。</p>
+<ol>
+<li>r = 0.20，点「播放」。看总量和最大、最小值。</li>
+<li>r = 0.30，<strong>取消</strong> clamp，重置后播放。第几步出现负值？最后是什么图案？</li>
+<li>r = 0.30，<strong>勾上</strong> clamp，重置后播放 50 步。图案被压住了，但总量变成了多少？</li>
+</ol>
+<div class="l6-sim" data-size="24" data-block="8"></div>
+<details><summary>我跑出来的结果（做完再看）</summary>
+<p>① 总量一直是 64，最大值从 1 慢慢下降，最小值不会低于 0。② 第 6 步开始越界，随后出现棋盘格，第 50 步数值约 ±2.5 万，但总量仍是 64：线性更新本身守恒，只是解炸了。③ clamp 把负值抬到 0、把大于 1 的值压到 1，每次都凭空改变了奶油的量，50 步后总量约 288。clamp 能掩盖不稳定，但会破坏守恒。</p>
+</details>
+</div>
+
+<h2>4　奶油一滴不少：replicate 边界下的守恒</h2>
+
+<p>上一节练习的第 ① 步里，总量一直是 64。这不是巧合。先看一维：设网格有 n 格，下标 0 到 n−1，replicate 补出的两个虚格是 <span class="mono">u₋₁ = u₀</span>、<span class="mono">uₙ = uₙ₋₁</span>。</p>
+
+<div class="proof">
+<p><strong>拆成通量差。</strong><span class="mono">uᵢ₊₁ − 2uᵢ + uᵢ₋₁ = (uᵢ₊₁ − uᵢ) − (uᵢ − uᵢ₋₁)</span>。记 <span class="mono">Fᵢ = uᵢ₊₁ − uᵢ</span>，它正比于从格 i+1 流进格 i 的量。</p>
+<p><strong>求和裂项。</strong><span class="mono">Σᵢ₌₀ⁿ⁻¹ (Fᵢ − Fᵢ₋₁) = Fₙ₋₁ − F₋₁ = (uₙ − uₙ₋₁) − (u₀ − u₋₁)</span>，中间的项全部抵消。</p>
+<p><strong>代入边界。</strong>replicate 让两个括号都等于 0。所以 <span class="mono">Σ Lu = 0</span>，<span class="mono">Σ u′ = Σ u + r·Σ Lu = Σ u</span>。</p>
+<p><strong>二维。</strong>五点 Lu 是 x 方向和 y 方向两个一维差分之和，每一行、每一列分别裂项，各自为 0。<span class="qed">∎</span></p>
+</div>
+
+<p>Fₙ₋₁ = 0 的意思是穿过边界的通量为零：杯壁不让奶油流出去，也不让咖啡流进来。这就是物理上的零通量边界（Neumann 边界条件）。replicate 填充正是它的离散版本。</p>
+
+<p>两个结论合起来：r ≤ 1/4 时 clamp 不起作用（第 3 节），replicate 让 Σ Lu = 0（本节），所以 notebook 的扩散<strong>严格守恒</strong>。我用 float64 的纯 Python 按 notebook 的设置跑 50 步，总量始终是 100，最大偏差 1.4 × 10⁻¹⁴。torch 用 float32，求和会有更大的舍入误差，但仍然是舍入级别。如果把 r 调到 0.3，clamp 开始起作用，同样的设置下第 50 步总量会变成约 779。</p>
+
+<p>一直跑下去，浓度会趋于均匀，等于 100 ⁄ 2500 = 0.04。跑到第 1000 步时，最低和最高浓度分别是 0.0339 和 0.0466。中间几个时刻的最高浓度是：t = 10 时 0.9727，t = 25 时 0.7783，t = 50 时 0.5378。</p>
+
+<h3>换成周期边界会怎样</h3>
+
+<p>第 1 课的 <code>torch.roll</code> 是周期边界，网格首尾相接。用它也能写同一个拉普拉斯，裂项时边界项变成 <span class="mono">Fₙ₋₁ − F₋₁ = (u₀ − uₙ₋₁) − (u₀ − uₙ₋₁) = 0</span>，所以周期边界下也守恒。两种边界只有在奶油碰到网格边缘后才会给出不同结果。notebook 的方块离边缘有 20 格，跑到第 50 步时边缘的浓度才约 5.7 × 10⁻⁶。所以两种边界在这 50 步内的结果几乎一样：我比较过，最大差别约 10⁻²¹。</p>
+
+<h2>5　回想测验</h2>
+<p class="muted">凭记忆作答，先别往上翻。</p>
+
+<div class="quiz" data-answer="2">
+<p class="q">1. 中心差分 <span class="mono">(uᵢ₊₁ − 2uᵢ + uᵢ₋₁)/h²</span> 近似 u″ 的误差是多少阶？</p>
+<ol><li>O(h)</li><li>O(1)</li><li>O(h²)</li><li>O(h⁴)</li></ol>
+<p class="explain">两个 Taylor 展开相加后，奇数阶项抵消，剩下的余项是 O(h⁴)，除以 h² 后是 O(h²)。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">2. 二维显式扩散格式 <span class="mono">u ← u + r·Lu</span> 的稳定条件是？</p>
+<ol><li>r ≤ 1/4</li><li>r ≤ 1/2</li><li>r ≤ 1</li><li>任意 r 都稳定</li></ol>
+<p class="explain">中心系数 1 − 4r ≥ 0 才是凸组合；von Neumann 分析中棋盘格模态的 g = 1 − 8r，|g| ≤ 1 也给出 r ≤ 1/4。一维时是 r ≤ 1/2。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">3. 形状为 (1, 1, 50, 50) 的张量，先 <code>F.pad(x, (1,1,1,1))</code> 再与 (1, 1, 3, 3) 的核做 <code>F.conv2d</code>，输出形状是？</p>
+<ol><li>(1, 1, 52, 52)</li><li>(1, 1, 48, 48)</li><li>(50, 50)</li><li>(1, 1, 50, 50)</li></ol>
+<p class="explain">pad 后是 52×52，3×3 的核不补零滑动，得到 52 − 3 + 1 = 50。前两维不变。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">4. notebook 的扩散为什么能严格守恒奶油总量？</p>
+<ol><li>因为 clamp 把浓度限制在 [0, 1]</li><li>replicate 让边界通量为零，且 r = 0.2 ≤ 1/4 使 clamp 不起作用</li><li>因为拉普拉斯核的中心是 −4</li><li>因为卷积不翻转核</li></ol>
+<p class="explain">clamp 反而是唯一可能破坏守恒的环节。核的系数和为 0 只说明「常数场不变」，守恒还要靠边界项裂项为零。</p>
+</div>
+
+<div class="quiz" data-answer="2">
+<p class="q">5. r 略大于 1/4 时，最先失控的是哪种图案？</p>
+<ol><li>整体均匀的常数</li><li>一个缓慢变化的大斑块</li><li>相邻格子正负交替的棋盘格</li><li>只沿 x 方向变化的条纹</li></ol>
+<p class="explain">α = β = π 时 sin² 项都取最大值 1，g = 1 − 8r 的绝对值最大。只沿 x 方向的最高频条纹 g = 1 − 4r，要到 r &gt; 1/2 才失控。</p>
+</div>
+
+<h2>6　编程练习</h2>
+
+<div class="exercise">
+<h3>练习 C：用 <code>torch.roll</code> 写周期边界拉普拉斯，再验证守恒</h3>
+<p>写一个 <code>laplacian_periodic(u)</code>：输入形状 <span class="mono">(H, W)</span>，返回同形状的 Lu，边界是周期的。不用 <code>conv2d</code>，也不写循环。然后用两个 assert 验收：一个检查它与 <code>conv2d</code> 加 <code>mode="circular"</code> 填充的结果一致，另一个检查 notebook 扩散的每一步总量都是 100。</p>
+<p>提示：第 1 课讲过 <code>torch.roll(x, 1)[i] = x[i − 1]</code>。二维时加上 <code>dims=0</code> 沿行滚动，<code>dims=1</code> 沿列滚动。</p>
+<p>验收：</p>
+<pre><code>kernel = torch.tensor([[0., 1., 0.], [1., -4., 1.], [0., 1., 0.]])[None, None]   # (1, 1, 3, 3)
+x = torch.rand(50, 50)
+ref = F.conv2d(F.pad(x[None, None], (1, 1, 1, 1), mode="circular"), kernel)[0, 0]
+assert torch.allclose(laplacian_periodic(x), ref, atol=1e-5)
+
+coffee = torch.zeros(50, 50)
+coffee[20:30, 20:30] = 1.0
+h = diffusion_2d(coffee, steps=50, diffusion_rate=0.2)
+assert h.shape == (51, 50, 50)
+assert torch.allclose(h.sum(dim=(1, 2)), torch.full((51,), 100.0), atol=1e-2)
+print(diffusion_2d(coffee, steps=50, diffusion_rate=0.3)[-1].sum())   # 远大于 100：clamp 破坏了守恒</code></pre>
+<details><summary>参考解答（写完再看）</summary>
+<pre><code>def laplacian_periodic(u: torch.Tensor) -&gt; torch.Tensor:
+    return (torch.roll(u, 1, dims=0) + torch.roll(u, -1, dims=0)      # 上、下邻居
+            + torch.roll(u, 1, dims=1) + torch.roll(u, -1, dims=1)    # 左、右邻居
+            - 4 * u)</code></pre>
+<p><code>x[None, None]</code> 和 <code>x.unsqueeze(0).unsqueeze(0)</code> 等价，都在最前面插入两个长度为 1 的维。<code>h.sum(dim=(1, 2))</code> 同时沿高和宽求和，把 (51, 50, 50) 归约成 (51,)，也就是每一步一个总量。第 2 课讲过：沿哪一维运算，那一维就被消掉，这里一次消掉了两维。</p>
+<p>atol 设成 1e-2 而不是 1e-6，是因为 float32 把 2500 个数加起来会有舍入误差。守恒是在精确算术下证明的，浮点运算只能做到近似。</p>
+</details>
+<p class="muted" style="font-size:.88rem">环境提示：本机 <code>python3</code> 还没装 torch，先按仓库 README 建好 <code>.venv</code>。</p>
+</div>
+
+<h2>延伸阅读</h2>
+<p><strong>主读：</strong>R. J. LeVeque，<em>Finite Difference Methods for Ordinary and Partial Differential Equations</em>，第 9 章（扩散方程）<sup class="cite"><a href="#src1">[1]</a></sup>。重点看显式格式的稳定性分析，和本课第 3 节对照：书里用 von Neumann 分析推出的条件，与凸组合论证给出的结论是同一个。</p>
+<p><strong>选读：</strong>Aaronson、Carroll、Ouellette 的咖啡自动机论文<sup class="cite"><a href="#src5">[5]</a></sup>。他们模拟的是另一种模型，不是本课的连续浓度扩散。第 7 课会对比两者，并在那里复现「先升后降」。本地 PDF：<a href="../../../papers_pdf/07_coffee_automaton.pdf">papers_pdf/07_coffee_automaton.pdf</a>。</p>
+
+<p class="ask box plain">有不清楚的地方，直接在终端问我。比如「为什么 Lu 不除以 h²」，或者「F.pad 的元组顺序记不住」。做完练习 C 后告诉我第三个 print 的数字。第 7 课会用这里的扩散，加上粗粒化和压缩长度，复现「先升后降」。</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">R. J. LeVeque, <em>Finite Difference Methods for Ordinary and Partial Differential Equations</em>, SIAM, 2007, 第 9 章：热方程的有限差分与稳定性。</li>
+<li id="src2">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.conv2d.html">torch.nn.functional.conv2d</a>、<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv2d.html">torch.nn.Conv2d</a>（说明了算子是互相关）。</li>
+<li id="src3">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.pad.html">torch.nn.functional.pad</a>（填充元组从最后一维开始；replicate / circular 模式）。</li>
+<li id="src4">Aaronson, <a href="https://scottaaronson.blog/?p=762">The First Law of Complexodynamics</a>, Shtetl-Optimized, 2011-09-23。</li>
+<li id="src5">Aaronson, Carroll, Ouellette, <a href="https://arxiv.org/abs/1405.6903">"Quantifying the Rise and Fall of Complexity in Closed Systems: The Coffee Automaton"</a>, arXiv:1405.6903, 2014。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0005-complextropy-resource-bounds.html">← 第 5 课：complextropy</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0007-coffee-automaton.html">下一课：咖啡实验 →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../assets/l6-diffusion.js"></script>
+</body>
+</html>

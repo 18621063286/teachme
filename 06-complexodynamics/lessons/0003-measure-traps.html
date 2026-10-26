@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>度量的陷阱</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+.h-svg .m-alt { stroke: var(--ok); }
+.m-key { display: inline-block; width: 1.4rem; height: 0; border-top: 2px solid var(--accent); vertical-align: middle; margin-right: .35rem; }
+.m-key.alt { border-top-color: var(--ok); }
+.tbl-wrap { overflow-x: auto; }
+td.hi { background: var(--accent-soft); }
+</style>
+</head>
+<body>
+<main>
+
+<p class="kicker">第 3 课 · 复杂动力学第一定律</p>
+<h1>度量的陷阱：同一张图，三种读数</h1>
+<p class="subtitle">转换次数、单格熵、压缩长度各自看见什么、看不见什么，以及 notebook 的「先升后降」从哪来</p>
+
+<p>notebook 第 2 节用下面这个函数量「复杂度」，再把结果画在「熵」旁边。第 4.1 节「對比熵與複雜度」的表据此写下：</p>
+
+<pre><code>def measure_spatial_complexity(state):
+    """相鄰元素發生 0/1 轉換的次數。"""
+    transitions = torch.sum(torch.abs(torch.diff(state.float())))
+    return int(transitions.item())</code></pre>
+
+<div class="box plain"><p style="margin:0">熵：「永遠增加 ↗」　複雜度：「先升後降 ∧」——notebook 第 4.1 节</p></div>
+
+<p>可是把 notebook 自己的数字拿出来看：100 个格子、中间一个 1、Rule 30 演化 100 步，转换次数在 t = 0, 10, …, 90 时依次是</p>
+
+<div class="box plain"><p style="text-align:center; margin:0" class="mono">2, 12, 18, 34, 34, 52, 47, 50, 49, 51</p></div>
+
+<p>最大值 58 出现在 t = 77，之后在 50 附近波动，<strong>没有回落</strong>。notebook 第 2 节画完图打印的观察其实写的是「複雜度先升後（趨於穩定）」，只是到了 4.1 的总结表变成了「先升後降」。这节课不急着判谁对，先把「度量」这件事拆开：一个数字测的是什么，决定了它能画出什么曲线。</p>
+
+<p class="win"><strong>本课收获：</strong>你能对任意一行 0/1 状态说出三种度量的值和盲点；能用期望的线性性证明随机行的平均转换次数是 (N−1)/2，用计数论证证明绝大多数串无法压缩；能用 <code>torch.diff(dim=1)</code> 一次算完整段演化的转换次数，并写出一个压缩长度函数。</p>
+
+<h2>1　三种度量</h2>
+
+<table>
+<tr><th class="l">度量</th><th class="l">定义</th><th class="l">notebook 里</th></tr>
+<tr><td class="l">单格熵 H</td><td class="l">只看 1 的比例 p，算 h(p)（第 2 课）</td><td class="l"><code>measure_entropy</code></td></tr>
+<tr><td class="l">转换次数 T</td><td class="l">相邻两格取值不同的对数，<span class="mono">T = Σᵢ |xᵢ₊₁ − xᵢ|</span>，最多 N − 1</td><td class="l"><code>measure_spatial_complexity</code></td></tr>
+<tr><td class="l">压缩长度 Z</td><td class="l">把整行交给 zlib 压缩，输出的字节数</td><td class="l">没有。本课新加</td></tr>
+</table>
+
+<p>三者的「视野」不同。H 只看计数，完全不看位置；T 只看相邻两格，是一个局部的、长度为 2 的窗口；Z 交给压缩器，压缩器会去找任意距离上的重复片段。下面这一行可以直接试：点格子、按「打乱」和「排序」，看 H 和 T 怎么变。</p>
+
+<div class="exercise">
+<h3>练习 A：同一组 0 和 1，两种读数</h3>
+<div class="m-row" data-width="24"></div>
+<p class="muted" style="font-size:.88rem">先按「随机」，再反复按「打乱」：H 一动不动，T 跳来跳去。再按「排序」：T 变成 1 或 0。H 对「重新排列」不变，T 对它极其敏感。</p>
+</div>
+
+<div class="exercise">
+<h3>练习 B：手算转换次数</h3>
+<p>数相邻两格颜色变化的地方。notebook 用的 <code>torch.diff</code> 不绕回首尾，所以 16 格只有 15 对。</p>
+<div class="m-calc" data-row="0011101001100010"></div>
+</div>
+
+<h2>2　同一组状态，三张成绩单</h2>
+
+<p>下表的每一行都是 1000 个格子。压缩长度的算法是：每 8 格打包成 1 个字节（共 125 字节），再用 Python 的 <code>zlib.compress(…, 9)</code> 压缩，数输出的字节数。「随机」是一条用伪随机数生成的行；Rule 30 一行取宽 1000、中间一个 1、演化到 t = 499 的那一行。所有数字我都用纯 Python 算过。</p>
+
+<div class="tbl-wrap">
+<table>
+<tr><th class="l">状态（N = 1000）</th><th>单格熵 H / bit</th><th>转换次数 T</th><th>压缩长度 Z / 字节</th></tr>
+<tr><td class="l">全 0</td><td>0</td><td>0</td><td>12</td></tr>
+<tr><td class="l">交替 0101…</td><td class="hi">1</td><td class="hi">999</td><td>12</td></tr>
+<tr><td class="l">左半全 1</td><td class="hi">1</td><td>1</td><td>16</td></tr>
+<tr><td class="l">随机</td><td>1.000</td><td>491</td><td class="hi">136</td></tr>
+<tr><td class="l">Rule 30，t = 499</td><td>0.9999</td><td>513</td><td class="hi">136</td></tr>
+</table>
+</div>
+
+<p>逐列读：</p>
+<ul>
+<li><strong>单格熵</strong>把「交替」「左半」「随机」「Rule 30」全判成约 1 bit。它分不出有规律和没规律，因为它根本不看位置。</li>
+<li><strong>转换次数</strong>给「交替 0101」打了满分 999，比随机行还高近一倍。可交替串是最单调乏味的图案之一。T 把「变化多」误当成「结构多」。</li>
+<li><strong>压缩长度</strong>是三者里唯一把「交替」和「随机」分开的：交替串 12 字节，随机串 136 字节。它看的是「能不能用更短的方式说出来」，这是对的方向。</li>
+</ul>
+
+<p>但压缩长度也有两个问题。第一，它给随机行打了最高分。随机串没有任何「有趣的结构」，可它最难压缩。所以 Z 量的更像熵，不像复杂度：Aaronson 等人的咖啡论文正是这么用的，他们把压缩长度当作<strong>熵</strong>的估计，而不是复杂度<sup class="cite"><a href="#src2">[2]</a></sup>。<strong>随机不等于复杂</strong>，notebook 4.1 节的「關鍵洞見」里也写了「隨機 ≠ 複雜」，可它选的度量并没有做到这一点。</p>
+
+<p>第二，Rule 30 那一行和随机行压出来一样长（136 字节，比原始的 125 字节还多）。可它其实能用很短的程序生成：「从中间一个 1 出发，按 Rule 30 演化 499 步」。zlib 找的是重复片段，看不出这种规律。所以压缩长度只是「最短描述长度」的一个<strong>上界</strong>，而且可以很松。这个「最短描述长度」就是第 4 课的 Kolmogorov 复杂度 K(x)。</p>
+
+<h3>短串要小心 zlib 的固定开销</h3>
+
+<p>zlib 的输出包含 2 字节头部和 4 字节校验和，压缩一个空串都要 8 字节。上表全 0 的 125 字节压到 12 字节，其中一大半是这些开销。notebook 的 100 格一行打包后只有 13 字节，压缩后反而是 15 到 22 字节，信号完全被开销淹没。所以本课把宽度加到了 1000。要用压缩长度做实验，串一定要够长，或者把多行拼起来一起压。</p>
+
+<h2>3　两个推导</h2>
+
+<h3>随机行的平均转换次数是 (N − 1)/2</h3>
+
+<div class="proof">
+<p>设 N 个格子独立、各以 1/2 的概率取 1。对每一对相邻格定义指示变量 <span class="mono">Iᵢ = 1</span> 当且仅当 <span class="mono">xᵢ ≠ xᵢ₊₁</span>，于是 <span class="mono">T = I₁ + … + I<sub>N−1</sub></span>。</p>
+<p>两格不同有两种情况 (0,1) 和 (1,0)，概率各 1/4，所以 <span class="mono">E[Iᵢ] = P(xᵢ ≠ xᵢ₊₁) = 1/2</span>。</p>
+<p>期望是线性的，<strong>不需要</strong> Iᵢ 之间相互独立（相邻两对共用一个格子，它们确实不独立）：</p>
+<p style="text-align:center"><span class="mono">E[T] = Σᵢ E[Iᵢ] = (N − 1)/2</span>。<span class="qed">∎</span></p>
+</div>
+
+<p>N = 1000 时是 499.5。我生成了 200 条随机行，T 的平均值是 500.2，与理论值吻合。把 1/2 换成一般的 p，同样的推导给出 <span class="mono">E[T] = 2p(1 − p)(N − 1)</span>。</p>
+
+<p>这个结果说明：在 T 看来，随机行的「复杂度」稳定在最大值的一半左右。Rule 30 演化到后期，行的统计性质越来越接近随机，所以 T 停在 50 附近的平台上（100 格时 (100 − 1)/2 = 49.5），不会回落。notebook 的「先升后降」不是 Rule 30 的性质，而是读图读出来的。</p>
+
+<h3>绝大多数串无法压缩</h3>
+
+<div class="proof">
+<p>固定任意一个无损压缩方案，即一个解压程序 D：每个压缩串 y 解压出唯一的 D(y)。问：长度为 n 的二进制串里，有多少个能被压到长度小于 n − k？</p>
+<p>长度小于 n − k 的二进制串一共有 <span class="mono">1 + 2 + 4 + … + 2<sup>n−k−1</sup> = 2<sup>n−k</sup> − 1</span> 个。每个最多解压出一个串，所以能被压到这么短的串<strong>少于 2<sup>n−k</sup> 个</strong>。</p>
+<p>长度为 n 的串一共 2<sup>n</sup> 个，所以它们所占比例 <span class="mono">&lt; 2<sup>n−k</sup> / 2<sup>n</sup> = 2<sup>−k</sup></span>。<span class="qed">∎</span></p>
+</div>
+
+<p>k = 10 时，比例不到千分之一。这个论证对任何压缩器都成立，包括理论上最好的那个，所以它也适用于 Kolmogorov 复杂度：长度为 n、复杂度小于 n − c 的串所占比例小于 2<sup>−c</sup><sup class="cite"><a href="#src3">[3]</a></sup>。随机行压不动是必然的，不是 zlib 不够好。</p>
+
+<h2>4　Rule 30 上，三种度量都只升不降</h2>
+
+<p>下图由本页实时算出，设置与 notebook 相同（100 格，100 步）。两条线都除以了各自的理论最大值（H 最大 1 bit，T 最大 N − 1 = 99），放在同一个 [0, 1] 坐标里。</p>
+
+<div class="m-time" data-rule="30" data-width="100" data-steps="100"></div>
+
+<p>两条线走势相同：先爬升，再在平台上波动，都没有回落。转换次数的平台在 0.5 附近，正是上一节推出的随机行期望值。换成压缩长度也一样：宽 1000 时，t = 0, 50, …, 450 的压缩长度依次是 <span class="mono">16, 28, 42, 56, 68, 81, 93, 108, 121, 134</span> 字节，一路上升，到 t = 499 是 136 字节。</p>
+
+<p>所以三种度量在 Rule 30 上的结论一致：<strong>只升不降</strong>。要看到「先升后降」，需要两样东西同时满足：</p>
+<ol>
+<li><strong>系统会走向平衡态</strong>，平衡态本身是「简单」的（比如咖啡和奶油完全混匀，一片均匀的浅棕色）。</li>
+<li><strong>度量对随机给低分</strong>。H、T、Z 都对随机给高分，所以都不行。第 4 课的 sophistication 和第 7 课的「粗粒化后再压缩」就是为了解决这一点。</li>
+</ol>
+
+<h2>5　回想测验</h2>
+<p class="muted">凭记忆作答，先别往上翻。</p>
+
+<div class="quiz" data-answer="2">
+<p class="q">1. 把一行 0/1 随机打乱顺序，以下哪个量一定不变？</p>
+<ol><li>转换次数 T</li><li>zlib 压缩长度 Z</li><li>单格熵 H</li><li>三个都会变</li></ol>
+<p class="explain">H 只依赖 1 的个数，打乱不改变计数。T 和 Z 都依赖位置。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">2. 1000 格的「交替 0101…」，三种度量里哪个会给它打出最高分（相对其他状态）？</p>
+<ol><li>转换次数 T，取最大值 999</li><li>压缩长度 Z，因为它变化最频繁</li><li>单格熵 H，因为只有它达到 1</li><li>都不会，它在每种度量下都是最低</li></ol>
+<p class="explain">交替串每一对相邻格都不同，T = N − 1 = 999。但它压缩后只有 12 字节，和全 0 一样短。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">3. 证明 E[T] = (N − 1)/2 时，为什么不需要 Iᵢ 相互独立？</p>
+<ol><li>因为相邻的 Iᵢ 确实相互独立</li><li>因为 N 足够大时依赖可以忽略</li><li>因为 T 服从二项分布</li><li>因为期望的线性性对任何随机变量都成立</li></ol>
+<p class="explain">E[X + Y] = E[X] + E[Y] 不需要独立性。方差才需要考虑相关性。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">4. 长度为 n 的二进制串中，能被某个固定的无损压缩器压到少于 n − 10 位的，比例最多是？</p>
+<ol><li>1/10</li><li>不到 2<sup>−10</sup>，约千分之一</li><li>一半</li><li>取决于压缩器有多好</li></ol>
+<p class="explain">短于 n − 10 位的串一共不到 2<sup>n−10</sup> 个，每个最多对应一个原串。这个上界对任何压缩器都成立。</p>
+</div>
+
+<div class="quiz" data-answer="2">
+<p class="q">5. Rule 30 第 499 步那一行，zlib 压缩后和随机行一样长。这说明什么？</p>
+<ol><li>Rule 30 的输出真的是随机的，不可能用短程序生成</li><li>zlib 压缩出了错</li><li>压缩长度只是最短描述长度的上界，zlib 看不出「按规则演化」这种规律</li><li>应该把 zlib 的压缩级别从 9 调到 1</li></ol>
+<p class="explain">「宽 1000，中间一个 1，按 Rule 30 演化 499 步」就是一个很短的完整描述。zlib 只会找重复片段，找不到这条描述。</p>
+</div>
+
+<h2>6　编程练习</h2>
+
+<div class="exercise">
+<h3>练习 C：一次算完整段演化的转换次数，再加上压缩长度</h3>
+<p><strong>(1)</strong> notebook 的 <code>measure_complexity_over_time</code> 用循环逐行调用。写一个 <code>transitions_over_time(history)</code>：输入形状 <span class="mono">(T, N)</span> 的 0/1 张量，返回形状 <span class="mono">(T,)</span>，不写循环。</p>
+<p>提示：<code>torch.diff(x, dim=1)</code> 沿第 1 维做相邻差分，<span class="mono">(T, N)</span> 变成 <span class="mono">(T, N−1)</span>。第 1 维变短了一格，和第 2 课的 <code>mean(dim=1)</code> 把这一维整个消掉不一样。</p>
+<p><strong>(2)</strong> 写一个 <code>compressed_len(row)</code>：输入一行 0/1 张量，每 8 格打包成 1 个字节，返回 <code>zlib.compress(…, 9)</code> 的字节数。</p>
+<p>提示：先 <code>.numpy()</code> 转成 NumPy 数组，<code>np.packbits</code> 会把 0/1 数组每 8 个打成一个 <code>uint8</code>，长度不是 8 的倍数时末尾补 0。再 <code>.tobytes()</code> 交给 zlib。</p>
+<p>验收：</p>
+<pre><code>T = transitions_over_time(evolution)
+assert T.shape == (100,)
+assert torch.equal(T.float(), measure_complexity_over_time(evolution))
+assert T.argmax().item() == 77 and T.max().item() == 58
+
+N = 1000
+alt = torch.arange(N) % 2
+assert compressed_len(alt) == 12
+assert compressed_len(torch.zeros(N, dtype=torch.long)) == 12
+assert compressed_len(torch.randint(0, 2, (N,))) &gt;= 125   # 随机行几乎必然压不动</code></pre>
+<details><summary>参考解答（写完再看）</summary>
+<pre><code>import zlib
+import numpy as np
+
+def transitions_over_time(history: torch.Tensor) -&gt; torch.Tensor:
+    return torch.diff(history, dim=1).abs().sum(dim=1)   # (T, N) → (T, N−1) → (T,)
+
+def compressed_len(row: torch.Tensor) -&gt; int:
+    packed = np.packbits(row.numpy().astype(np.uint8))   # 每 8 格 → 1 字节
+    return len(zlib.compress(packed.tobytes(), 9))</code></pre>
+<p><code>torch.diff</code> 对整数张量也能用，所以不必像 notebook 那样先 <code>.float()</code>。<code>abs()</code> 把 −1（1→0）和 +1（0→1）都变成 1。</p>
+<p>最后一条 assert 用到了第 3 节的计数论证：随机的 1000 位要压到 124 字节（992 位）以内，概率不到约 2<sup>−8</sup>。这还没算 zlib 至少 6 字节的头部和校验和，算上以后几乎不可能发生。</p>
+</details>
+<p class="muted" style="font-size:.88rem">验收里的 12 字节是我用纯 Python 的 zlib 算的。不同版本的 zlib 输出可能差一两个字节，如果对不上，先打印出来看看再说。</p>
+</div>
+
+<h2>延伸阅读</h2>
+<p><strong>主读：</strong>Aaronson, Carroll, Ouellette，<a href="https://arxiv.org/abs/1405.6903">"Quantifying the Rise and Fall of Complexity in Closed Systems: The Coffee Automaton"</a>（2014）第 2 节。读他们如何区分三种熵（Boltzmann、Shannon、Kolmogorov），以及为什么用 gzip 压缩长度估计<strong>熵</strong>。本地 PDF：<a href="../../../papers_pdf/07_coffee_automaton.pdf">papers_pdf/07_coffee_automaton.pdf</a>。</p>
+<p><strong>选读：</strong>Aaronson 博客原文最后两段<sup class="cite"><a href="#src1">[1]</a></sup>：他明确说复杂度在实验里只能用「gzip 压缩长度这类能算的东西」粗略代替。</p>
+
+<p class="ask box plain">有不清楚的地方，直接在终端问我。比如「为什么压缩长度能当熵用」，或者「np.packbits 的位序是怎样的」。做完练习 C 告诉我结果。第 4 课会正式定义 Kolmogorov 复杂度 K(x)，再讲 sophistication：一个对简单串和随机串都给低分的度量。</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">Aaronson, <a href="https://scottaaronson.blog/?p=762">The First Law of Complexodynamics</a>, Shtetl-Optimized, 2011-09-23。本地：papers_pdf/06_complexodynamics.pdf。</li>
+<li id="src2">Aaronson, Carroll, Ouellette, <a href="https://arxiv.org/abs/1405.6903">The Coffee Automaton</a>, arXiv:1405.6903, 2014, 第 2 节：用压缩长度估计 K(x)，并把 K(x) 当作熵。</li>
+<li id="src3">Shen, Uspensky, Vereshchagin, <em>Kolmogorov Complexity and Algorithmic Randomness</em>, AMS, 2017, 导论 Theorem 5：长度为 n 的串中复杂度小于 n 的少于 2<sup>n</sup> 个。本地：papers_pdf/26_kolmogorov_complexity.pdf。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0002-shannon-entropy.html">← 第 2 课：Shannon 熵</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0004-kolmogorov-sophistication.html">下一课：Kolmogorov 复杂度 →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../assets/ca.js"></script>
+<script src="../assets/l3-measures.js"></script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>复杂动力学第一定律</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">课程包 · 第 6 篇</p>
+<h1>复杂动力学第一定律</h1>
+<p class="subtitle">熵一直增加。有结构的图案却先出现，再消失。这一包用七课把这句话从一条规则推到一杯咖啡。</p>
+
+<p>Aaronson 在 2011 年问：封闭系统里熵只增不减，为什么「有趣」会先升后降。胡嘉玺 notebook 第 1 章用 Rule 30 和奶油扩散把这个问题做成了可以跑的代码。这一包顺着那份 notebook，也顺着他和 Carroll、Ouellette 在 2014 年做的咖啡自动机实验。</p>
+
+<div class="box">
+<p>假定你会 Python，PyTorch 从张量 API 讲起。每课只多一个工具，下一课会用到它。按编号往下读，做完该课的练习再进下一课。</p>
+</div>
+
+<h2>七课一条线</h2>
+
+<p>先把系统生成出来，再发现两种常用度量量不准，然后去定义「复杂」到底是什么，最后用一个能跑的实验检验那句话。</p>
+
+<ol class="syllabus">
+<li>
+<a href="lessons/0001-rule30-from-number-to-tensor.html">从数字 30 到一行 PyTorch</a>
+<span class="what">规则号怎样变成规则表，<code>torch.roll</code> 怎样一次更新整行。</span>
+</li>
+<li>
+<a href="lessons/0002-shannon-entropy.html">Shannon 熵：为什么最多 1 bit</a>
+<span class="what">从平均惊讶度推出二元熵的最大值，再读懂 <code>measure_entropy</code>。</span>
+</li>
+<li>
+<a href="lessons/0003-measure-traps.html">度量的陷阱：同一张图，三种读数</a>
+<span class="what">转换次数、单格熵、压缩长度各自看见什么，notebook 的「先升后降」从哪来。</span>
+</li>
+<li>
+<a href="lessons/0004-kolmogorov-sophistication.html">最短程序，与程序里不随机的那一半</a>
+<span class="what">Kolmogorov 复杂度为什么量不出「有趣」，sophistication 怎样拆开模型和噪声。</span>
+</li>
+<li>
+<a href="lessons/0005-complextropy-resource-bounds.html">Complextropy：为什么必须加资源限制</a>
+<span class="what">一段只有 log t 位的描述怎样让前两个定义失效，以及程序必须跑得快。</span>
+</li>
+<li>
+<a href="lessons/0006-laplacian-conv2d.html">一个 3×3 的核，就是扩散方程</a>
+<span class="what">五点拉普拉斯怎样从 Taylor 展开里出来，<code>conv2d</code> 怎样搬奶油。</span>
+</li>
+<li>
+<a href="lessons/0007-coffee-automaton.html">咖啡自动机：让复杂度先升后降</a>
+<span class="what">粗粒化再压缩，复现 2014 年的实验，并拿它检验 notebook 的连续扩散。</span>
+</li>
+</ol>
+
+<h2>学完能检验的五件事</h2>
+
+<table>
+<tr><th class="l">你能做到</th><th class="l">在哪一课验收</th></tr>
+<tr><td class="l">从规则号 30 推出规则表和 <span class="mono">l ⊕ (c ∨ r)</span>，用 <code>torch.roll</code> 写任意初等元胞自动机</td><td class="l"><a href="lessons/0001-rule30-from-number-to-tensor.html">第 1 课</a>，不看笔记写出 <code>make_rule(n)</code></td></tr>
+<tr><td class="l">证明二元熵最多 1 bit，并举出熵为 1 但很有规律的状态</td><td class="l"><a href="lessons/0002-shannon-entropy.html">第 2 课</a>、<a href="lessons/0003-measure-traps.html">第 3 课</a></td></tr>
+<tr><td class="l">讲清 Kolmogorov 复杂度、sophistication、complextropy，以及为什么要加资源限制</td><td class="l"><a href="lessons/0004-kolmogorov-sophistication.html">第 4 课</a>、<a href="lessons/0005-complextropy-resource-bounds.html">第 5 课</a></td></tr>
+<tr><td class="l">把奶油扩散写成 <code>conv2d</code> 加拉普拉斯核，说出 <span class="mono">r ≤ 1/4</span> 的来历</td><td class="l"><a href="lessons/0006-laplacian-conv2d.html">第 6 课</a>测验第 5 题</td></tr>
+<tr><td class="l">只改一个变量，跑出熵和复杂度两条曲线，并写成能教给别人的一段话</td><td class="l"><a href="lessons/0007-coffee-automaton.html">第 7 课</a>结业作业</td></tr>
+</table>
+
+<h2>本包附页</h2>
+
+<p>术语和规则号编码不放进正文，需要时再翻。</p>
+<ul>
+<li><a href="reference/glossary.html">术语表</a></li>
+<li><a href="reference/eca-cheatsheet.html">速查：初等元胞自动机</a></li>
+</ul>
+
+<h2>材料</h2>
+
+<p>课文是这一包里要读的正文。配套代码在学习仓库的 <span class="mono">joshhuilya30/ch01/complexity_pytorch.ipynb</span>，不随站点发布。原文两篇：</p>
+<ul>
+<li>Aaronson，<a href="https://scottaaronson.blog/?p=762">The First Law of Complexodynamics</a>，2011。</li>
+<li>Aaronson、Carroll、Ouellette，<a href="https://arxiv.org/abs/1405.6903">The Coffee Automaton</a>，arXiv:1405.6903，2014。第 7 课用到第 3、5、6 节和附录。</li>
+</ul>
+
+<nav class="pager">
+<span class="muted">7 课 · 按顺序</span>
+<a href="lessons/0001-rule30-from-number-to-tensor.html">从第 1 课开始 →</a>
+</nav>
+
+</main>
+</body>
+</html>

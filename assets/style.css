@@ -1,0 +1,160 @@
+/* Teachme 共用样式：各论文文件夹下的 lessons/ 与 reference/ 页面都引用这一份。 */
+:root {
+  --bg: #fffff8;
+  --ink: #1f1f1f;
+  --muted: #6b6b6b;
+  --rule: #d9d6c8;
+  --accent: #a3241c;
+  --accent-soft: #f6e9e6;
+  --ok: #2f6b3a;
+  --ok-soft: #e6f1e7;
+  --bad: #a3241c;
+  --bad-soft: #f8e4e1;
+  --code-bg: #f3f1e7;
+  --cell-on: #1f1f1f;
+  --cell-off: #fffff8;
+  --serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, "Times New Roman", serif;
+  --sans: "PingFang SC", "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+  --mono: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1a17; --ink: #e9e6dc; --muted: #9a968a; --rule: #3b3932;
+    --accent: #e0796f; --accent-soft: #3a2422; --ok: #8fcf98; --ok-soft: #1f3324;
+    --bad: #e0796f; --bad-soft: #3a2422; --code-bg: #26251f;
+    --cell-on: #e9e6dc; --cell-off: #1b1a17;
+  }
+}
+
+* { box-sizing: border-box; }
+html { font-size: 17px; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 44rem; margin: 0 auto; padding: 3rem 1rem 5rem; }
+
+/* 头部 */
+.kicker { font-family: var(--sans); font-size: .78rem; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; margin: 0; }
+h1 { font-size: 2rem; line-height: 1.3; font-weight: 600; margin: .3rem 0 .4rem; }
+.subtitle { font-style: italic; color: var(--muted); margin: 0 0 2rem; }
+h2 { font-size: 1.3rem; font-weight: 600; margin: 2.8rem 0 .6rem; padding-top: .6rem; border-top: 1px solid var(--rule); }
+h3 { font-size: 1.05rem; font-weight: 600; margin: 1.8rem 0 .4rem; }
+p, li { hyphens: auto; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
+.muted { color: var(--muted); }
+
+/* 引用标记：上标小号 */
+sup.cite { font-family: var(--sans); font-size: .68rem; }
+sup.cite a { text-decoration: none; }
+
+/* 代码 */
+code, pre { font-family: var(--mono); font-size: .86rem; }
+code { background: var(--code-bg); padding: .08rem .3rem; border-radius: 3px; }
+pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 4px; overflow-x: auto; line-height: 1.55; }
+pre code { background: none; padding: 0; }
+
+/* 表格 */
+table { border-collapse: collapse; margin: 1rem 0; font-family: var(--sans); font-size: .9rem; }
+th, td { border-bottom: 1px solid var(--rule); padding: .35rem .7rem; text-align: center; }
+th { font-weight: 600; }
+td.l, th.l { text-align: left; }
+.mono { font-family: var(--mono); }
+
+/* 盒子 */
+.box { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: .8rem 1.1rem; margin: 1.4rem 0; border-radius: 0 4px 4px 0; }
+.box > :first-child { margin-top: 0; } .box > :last-child { margin-bottom: 0; }
+.box.plain { border-left-color: var(--rule); background: transparent; }
+.proof { border-left: 2px solid var(--rule); padding-left: 1rem; margin: 1rem 0; }
+.proof .qed { float: right; }
+.win { font-family: var(--sans); font-size: .92rem; }
+
+/* 练习区 */
+.exercise { border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.2rem; margin: 1.4rem 0; }
+.exercise h3 { margin-top: 0; }
+button {
+  font-family: var(--sans); font-size: .85rem; cursor: pointer;
+  border: 1px solid var(--ink); background: transparent; color: var(--ink);
+  padding: .35rem .9rem; border-radius: 4px; margin-right: .4rem;
+}
+button:hover { background: var(--ink); color: var(--bg); }
+.feedback { font-family: var(--sans); font-size: .9rem; margin: .6rem 0 0; min-height: 1.4em; }
+.feedback.ok { color: var(--ok); } .feedback.bad { color: var(--bad); }
+details { margin: 1rem 0; } summary { cursor: pointer; font-family: var(--sans); font-size: .9rem; color: var(--muted); }
+
+/* 测验组件（assets/quiz.js） */
+.quiz { margin: 1.6rem 0; }
+.quiz .q { font-weight: 600; margin-bottom: .4rem; }
+.quiz ol { list-style: upper-alpha; padding-left: 1.8rem; margin: .3rem 0; }
+.quiz li { cursor: pointer; padding: .15rem .5rem; border-radius: 3px; font-family: var(--sans); font-size: .93rem; }
+.quiz li:hover { background: var(--code-bg); }
+.quiz li.right { background: var(--ok-soft); color: var(--ok); }
+.quiz li.wrong { background: var(--bad-soft); color: var(--bad); text-decoration: line-through; }
+.quiz .explain { font-size: .9rem; color: var(--muted); margin: .4rem 0 0; display: none; }
+.quiz.done .explain { display: block; }
+
+/* 元胞自动机组件（assets/ca.js） */
+.ca-row { display: flex; gap: 2px; margin: .25rem 0; flex-wrap: nowrap; }
+.ca-cell {
+  width: 1.6rem; height: 1.6rem; border: 1px solid var(--muted); background: var(--cell-off);
+  font-family: var(--mono); font-size: .62rem; color: var(--muted);
+  display: flex; align-items: flex-end; justify-content: center; flex: 0 0 auto;
+}
+.ca-cell.on { background: var(--cell-on); }
+.ca-cell.edit { cursor: pointer; }
+.ca-cell.mark-bad { outline: 2px solid var(--bad); outline-offset: 1px; }
+.ca-label { font-family: var(--sans); font-size: .8rem; color: var(--muted); margin-top: .6rem; }
+.rule-grid { display: grid; grid-template-columns: repeat(8, auto); gap: .5rem .9rem; justify-content: start; margin: .6rem 0; }
+.rule-case { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.rule-case .ca-row { gap: 1px; } .rule-case .ca-cell { width: 1.05rem; height: 1.05rem; }
+.rule-case .k { font-family: var(--mono); font-size: .7rem; color: var(--muted); }
+
+/* 熵组件（assets/entropy.js） */
+.h-svg { display: block; width: 100%; max-width: 32rem; height: auto; margin: .6rem 0; }
+.h-svg .axis { stroke: var(--muted); stroke-width: 1; }
+.h-svg .grid { stroke: var(--rule); stroke-dasharray: 3 3; }
+.h-svg .tick { fill: var(--muted); font-family: var(--sans); font-size: 11px; }
+.h-svg .curve { fill: none; stroke: var(--accent); stroke-width: 2; }
+.h-svg .guide { stroke: var(--muted); stroke-dasharray: 2 3; }
+.h-svg .dot { fill: var(--accent); }
+.h-slider { width: 100%; max-width: 32rem; accent-color: var(--accent); }
+.h-readout { font-family: var(--sans); font-size: .88rem; margin: .5rem 0 0; }
+.h-input { font-family: var(--mono); font-size: .9rem; width: 8rem; padding: .3rem .5rem; margin-right: .4rem; border: 1px solid var(--muted); border-radius: 4px; background: var(--bg); color: var(--ink); }
+
+/* 课程包首页：Teachme/<论文>/index.html */
+ol.syllabus { list-style: none; padding: 0; margin: 1.2rem 0 0; counter-reset: lesson; }
+ol.syllabus li {
+  counter-increment: lesson;
+  position: relative;
+  border-top: 1px solid var(--rule);
+  padding: .9rem 0 .9rem 3.4rem;
+}
+ol.syllabus li:last-child { border-bottom: 1px solid var(--rule); }
+ol.syllabus li::before {
+  content: counter(lesson, decimal-leading-zero);
+  position: absolute; left: 0; top: 1.05rem;
+  font-family: var(--sans); font-size: .78rem; letter-spacing: .08em; color: var(--muted);
+}
+ol.syllabus a { font-family: var(--sans); font-weight: 600; text-decoration: none; }
+ol.syllabus a:hover { text-decoration: underline; text-underline-offset: 2px; }
+ol.syllabus .what { display: block; margin-top: .15rem; font-style: italic; color: var(--muted); }
+
+/* 页脚导航 */
+nav.pager { display: flex; justify-content: space-between; gap: 1rem; font-family: var(--sans); font-size: .88rem; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); }
+.ask { font-family: var(--sans); font-size: .92rem; }
+
+@media (max-width: 520px) {
+  html { font-size: 16px; }
+  .ca-cell { width: 1.2rem; height: 1.2rem; }
+  .rule-grid { grid-template-columns: repeat(4, auto); }
+}
+@media print {
+  :root { --bg: #fff; --cell-off: #fff; --cell-on: #000; }
+  main { max-width: none; padding: 0; }
+  button, .no-print { display: none !important; }
+  .quiz .explain, details > * { display: block !important; }
+  h2 { break-after: avoid; } pre, table, .exercise, .box { break-inside: avoid; }
+  a { color: inherit; }
+}

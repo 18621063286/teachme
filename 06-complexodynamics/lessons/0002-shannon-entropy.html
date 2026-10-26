@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shannon 熵推导</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 2 课 · 复杂动力学第一定律</p>
+<h1>Shannon 熵：为什么最多 1 bit</h1>
+<p class="subtitle">从「平均惊讶度」推出二元熵的最大值，再逐行读懂 notebook 的 <code>measure_entropy</code></p>
+
+<p>Aaronson 的「第一定律」有两半：熵单调增，复杂度先升后降<sup class="cite"><a href="#src4">[4]</a></sup>。notebook 用 Shannon 熵量第一半，画出一条从 0 爬到 1 的曲线，旁边还画了一条红色虚线，标着「理论最大熵」。这节课回答两个问题：这条线为什么正好在 1？notebook 算出来的这个数，到底在量什么？</p>
+
+<pre><code>def measure_entropy(state):
+    _unique, counts = torch.unique(state, return_counts=True)
+    probs = counts.float() / len(state)
+    entropy = -torch.sum(probs * torch.log2(probs + 1e-10))
+    return entropy.item()</code></pre>
+
+<p class="win"><strong>本课收获：</strong>你能用求导证明二元熵在 p = 1/2 处取最大值 1 bit，用 Jensen 不等式证明一般情形 H ≤ log₂ n，并能不写循环、一行算出整段演化每一步的熵。</p>
+
+<h2>1　定义：熵是平均惊讶度</h2>
+
+<p>一个结果发生的概率是 p，看到它时的「惊讶度」定义为 <span class="mono">−log₂ p</span>。必然发生的事（p = 1）惊讶度是 0；概率越小，惊讶度越大。一个分布的熵，就是惊讶度的期望值<sup class="cite"><a href="#src1">[1]</a></sup>：</p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">H(p₁, …, pₙ) = −Σᵢ pᵢ log₂ pᵢ</span>　　单位：bit</p></div>
+
+<p>只有两种结果（0 和 1）时，设取 1 的概率为 p，熵就是一个单变量函数，叫<strong>二元熵函数</strong>：</p>
+
+<div class="box plain"><p style="text-align:center; margin:0"><span class="mono">h(p) = −p log₂ p − (1 − p) log₂(1 − p)</span></p></div>
+
+<p>拖动下面的滑块：p 很小时，「看到 1」惊讶度很大，但它很少发生；「看到 0」几乎不惊讶。两项加权平均后，熵反而很小。</p>
+
+<div class="h-curve"></div>
+
+<p>还有一个边界问题：p = 0 时 <span class="mono">log₂ 0</span> 没有定义。约定 <span class="mono">0 · log 0 = 0</span>，理由是极限：</p>
+
+<div class="proof">
+<p><span class="mono">lim<sub>p→0⁺</sub> p ln p = lim ln p ⁄ (1/p)</span>，分子分母都趋于无穷，用洛必达法则得 <span class="mono">lim (1/p) ⁄ (−1/p²) = lim (−p) = 0</span>。<span class="qed">∎</span></p>
+</div>
+
+<p>直观的说法是：不会发生的结果，对平均惊讶度没有贡献。第 4 节会看到，代码里有三种写法来处理这个约定。</p>
+
+<h2>2　推导：二元熵在 p = 1/2 取最大值 1</h2>
+
+<p>先换成自然对数，<span class="mono">log₂ x = ln x ⁄ ln 2</span>，再用 <span class="mono">(p ln p)′ = ln p + 1</span>。</p>
+
+<div class="proof">
+<p><strong>一阶导数。</strong><span class="mono">h′(p) = −(1/ln 2)·[(ln p + 1) − (ln(1−p) + 1)] = log₂((1 − p) ⁄ p)</span>。两个 +1 正好抵消。</p>
+<p><strong>驻点。</strong>h′(p) = 0 ⇔ (1 − p)/p = 1 ⇔ p = 1/2。而且 p &lt; 1/2 时 h′ &gt; 0，p &gt; 1/2 时 h′ &lt; 0，所以先增后减。</p>
+<p><strong>二阶导数。</strong><span class="mono">h″(p) = −1 ⁄ (ln 2 · p(1 − p)) &lt; 0</span>，在 (0, 1) 上处处成立，h 严格凹，驻点就是唯一的最大值点。</p>
+<p><strong>代值。</strong><span class="mono">h(1/2) = −½ log₂ ½ − ½ log₂ ½ = ½ + ½ = 1</span>。端点 h(0) = h(1) = 0。<span class="qed">∎</span></p>
+</div>
+
+<p>顺带得到对称性 h(p) = h(1 − p)：把 0 和 1 的名字对调，熵不变。notebook 那条红色虚线画在 1 上，依据就是这个结论。</p>
+
+<h3>推广：n 种结果时 H ≤ log₂ n</h3>
+
+<p>状态不止两种时（比如 notebook 第 3 节的咖啡实验，把浓度分成 20 个区间），上界是 log₂ n。用 Jensen 不等式一行就能证明：log₂ 是凹函数，所以「先取对数再平均」不超过「先平均再取对数」<sup class="cite"><a href="#src2">[2]</a></sup>。</p>
+
+<div class="proof">
+<p>只对 pᵢ &gt; 0 的项求和（p = 0 的项按约定是 0）：</p>
+<p style="text-align:center"><span class="mono">H = Σ pᵢ log₂(1/pᵢ) ≤ log₂(Σ pᵢ · (1/pᵢ)) = log₂ m ≤ log₂ n</span></p>
+<p>其中 m 是概率不为零的结果个数。第一个「≤」是 Jensen，取等号当且仅当所有 1/pᵢ 相等；第二个取等号当且仅当 m = n。两个合起来：<strong>当且仅当分布均匀</strong>，H = log₂ n。<span class="qed">∎</span></p>
+</div>
+
+<p>n = 2 时这就是上面求导的结论。n = 20 时上界是 log₂ 20 ≈ 4.32 bit，后面看咖啡实验的熵曲线时会用到。</p>
+
+<h2>3　手算一次</h2>
+
+<div class="exercise">
+<h3>练习 A：这一行的熵是多少？</h3>
+<p>按 notebook 的算法，只看 0 和 1 各占多少，不看位置。先数 1 的个数，再代入 h(p)。保留 3 位小数即可。</p>
+<div class="h-calc" data-row="01000100"></div>
+</div>
+
+<h2>4　逐行读 <code>measure_entropy</code></h2>
+
+<p><strong>第一行：<code>torch.unique(state, return_counts=True)</code>。</strong>返回两个张量：排好序的不同取值，以及每个取值出现的次数<sup class="cite"><a href="#src3">[3]</a></sup>。两个张量形状都是 <span class="mono">(m,)</span>，m 是 state 里实际出现过的不同取值个数。</p>
+
+<pre><code>torch.unique(torch.tensor([0, 1, 1, 0, 1]), return_counts=True)
+# (tensor([0, 1]), tensor([2, 3]))
+torch.unique(torch.zeros(5, dtype=torch.long), return_counts=True)
+# (tensor([0]), tensor([5]))        ← 没出现的 1 根本不会列出来</code></pre>
+
+<p><strong>第二行：<code>counts.float() / len(state)</code>。</strong><code>counts</code> 是整数张量，先转成浮点再除。<code>len(state)</code> 是第 0 维的长度，这里就是格子数 100。</p>
+
+<p><strong>第三行：<code>probs * torch.log2(probs + 1e-10)</code>。</strong>逐元素相乘再求和，就是定义式。那个 <code>1e-10</code> 是防 log₂ 0 的保险。但这里它其实用不上：<code>unique</code> 只列出现过的取值，counts 不会是 0，probs 也就不会是 0。它也几乎不改变结果：float32 的精度大约是 10⁻⁷，<span class="mono">1 + 1e-10</span> 在 float32 里就等于 1。</p>
+
+<p>处理 <span class="mono">0 · log 0 = 0</span> 一共有三种写法，notebook 用了前两种：</p>
+
+<table>
+<tr><th class="l">写法</th><th class="l">出现在哪</th><th class="l">要点</th></tr>
+<tr><td class="l"><code>log2(p + 1e-10)</code></td><td class="l"><code>measure_entropy</code></td><td class="l">加一个小数绕开 0。简单，但结果有极小偏差</td></tr>
+<tr><td class="l"><code>p = p[p &gt; 0]</code></td><td class="l"><code>measure_spatial_entropy</code></td><td class="l">布尔掩码，把零概率项直接丢掉。<code>histc</code> 会产生空区间，所以必须处理</td></tr>
+<tr><td class="l"><code>torch.special.xlogy(p, p)</code></td><td class="l">本课练习 C</td><td class="l">算 p·ln p，p = 0 处直接返回 0，形状不变，可以批量算<sup class="cite"><a href="#src3">[3]</a></sup></td></tr>
+</table>
+
+<p>如果想要固定长度的计数（没出现的值也记 0），用 <code>torch.bincount(state, minlength=2)</code>：对全 0 的行它返回 <code>tensor([5, 0])</code>，而不是 <code>unique</code> 的 <code>tensor([5])</code>。咖啡实验里的浓度是连续值，要用 <code>torch.histc(x, bins=20, min=0, max=1)</code> 先分成 20 个区间再计数。它只接受浮点张量，区间外的值不计入<sup class="cite"><a href="#src3">[3]</a></sup>。</p>
+
+<h2>5　notebook 的熵在量什么</h2>
+
+<p>下面这条曲线由本页实时算出：Rule 30，100 个格子，中间一个 1，演化 100 步，每一行算一次熵。设置与 notebook 第 2 节相同。</p>
+
+<div class="h-time" data-rule="30" data-width="100" data-steps="100"></div>
+
+<p>具体数值（我用纯 Python 核对过）：t = 0 时只有 1 个 1，p = 0.01，H ≈ 0.081 bit；t = 10 时 H ≈ 0.500；t = 35 时第一次超过 0.99；t = 60 以后一直在 0.958 到 1.000 之间小幅波动。整体趋势是上升，最后贴近上界 1。但仔细看曲线是锯齿状的，相邻两步经常一涨一跌，所以严格说它并不单调。</p>
+
+<p>但这个熵<strong>只依赖 1 的个数</strong>。公式里只有 p，没有任何格子的位置。所以把一行任意打乱，熵都不变。用下面这一行试试：</p>
+
+<div class="exercise">
+<h3>练习 B：造一行熵为 1、但看起来最有规律的状态</h3>
+<p>点格子翻转。可以先试几个预设，再自己造。</p>
+<div class="h-row" data-width="16"></div>
+<p class="muted" style="font-size:.88rem">想一想：「交替 0101」和「随机」的熵都是 1 bit；「左半全 1」也是 1 bit。一个分不出这三种状态的数，能拿来描述 Aaronson 说的「结构」吗？</p>
+</div>
+
+<p>准确的说法是：notebook 量的是<strong>单个格子取值的边缘分布的熵</strong>，即随便抽一格，它是 0 还是 1 的不确定性。它不是整行状态的熵，也看不到格子之间的关系。这正是第 3 课的主题：换成「转换次数」或「压缩长度」，各自能看到什么、看不到什么。</p>
+
+<h2>6　回想测验</h2>
+<p class="muted">凭记忆作答，先别往上翻。</p>
+
+<div class="quiz" data-answer="1">
+<p class="q">1. 二元熵函数的导数 h′(p) 等于？</p>
+<ol><li>−log₂ p</li><li>log₂((1 − p)/p)</li><li>log₂(p(1 − p))</li><li>1 − 2p</li></ol>
+<p class="explain">(p ln p)′ = ln p + 1，两项的 +1 抵消，剩 (ln(1−p) − ln p)/ln 2。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">2. 有 n 种结果的分布，H = log₂ n 的充要条件是？</p>
+<ol><li>某一个 pᵢ = 1</li><li>所有 pᵢ &gt; 0</li><li>n 是 2 的幂</li><li>分布是均匀的</li></ol>
+<p class="explain">Jensen 取等号要求所有 1/pᵢ 相等，第二个不等式取等号要求没有零概率项，两个合起来就是均匀分布。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">3. 对 100 个格子全是 0 的行，<code>torch.unique(state, return_counts=True)</code> 返回的 counts 是？</p>
+<ol><li>tensor([100])</li><li>tensor([100, 0])</li><li>tensor([0, 100])</li><li>tensor([])</li></ol>
+<p class="explain">unique 只列出现过的值。想要 [100, 0] 这种固定长度，用 bincount(state, minlength=2)。</p>
+</div>
+
+<div class="quiz" data-answer="2">
+<p class="q">4. <code>measure_entropy</code> 里的 <code>+ 1e-10</code>，实际作用是？</p>
+<ol><li>防止 counts 为 0 时出现 log 0</li><li>让熵的上界从 1 变成略大于 1</li><li>基本没作用：unique 不会给出 0 概率，float32 里 1 + 1e-10 又等于 1</li><li>把单位从 nat 换成 bit</li></ol>
+<p class="explain">真正需要处理 0 概率的是 histc 那个函数，它用了布尔掩码 p[p &gt; 0]。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">5. 100 格的「交替 0101…」和一条随机行，notebook 的熵分别约为？</p>
+<ol><li>0 和 1</li><li>1 和 1</li><li>1 和 0.5</li><li>0.5 和 1</li></ol>
+<p class="explain">交替行恰好 50 个 1，p = 1/2，H = 1；随机行的 p 也接近 1/2。这个熵只看 p，分不出两者。</p>
+</div>
+
+<h2>7　编程练习</h2>
+
+<div class="exercise">
+<h3>练习 C：一行算出整段演化的熵</h3>
+<p>notebook 的 <code>measure_entropy_over_time</code> 用 Python 循环逐行调用 <code>measure_entropy</code>。写一个 <code>entropy_over_time(history)</code>：输入形状 <span class="mono">(T, N)</span> 的 0/1 张量，返回形状 <span class="mono">(T,)</span> 的熵。要求不写循环。</p>
+<p>提示：</p>
+<ul>
+<li><code>history.float().mean(dim=1)</code> 沿第 1 维（每一行）求平均，正好是每一行的 p，形状 <span class="mono">(T,)</span>。</li>
+<li><code>torch.special.xlogy(p, p)</code> 算 p·ln p，p = 0 时返回 0。结果是自然对数，要换成 bit。</li>
+</ul>
+<p>验收：</p>
+<pre><code>H = entropy_over_time(evolution)
+assert H.shape == (100,)
+assert torch.allclose(H, measure_entropy_over_time(evolution), atol=1e-5)
+print((H &gt; 0.99).nonzero()[0].item())   # 应该是 35</code></pre>
+<details><summary>参考解答（写完再看）</summary>
+<pre><code>import math
+
+def entropy_over_time(history: torch.Tensor) -&gt; torch.Tensor:
+    p1 = history.float().mean(dim=1)              # (T,)  每一行 1 的比例
+    p = torch.stack([p1, 1 - p1], dim=1)          # (T, 2) 每一行的分布
+    return -torch.special.xlogy(p, p).sum(dim=1) / math.log(2)</code></pre>
+<p><code>torch.stack(..., dim=1)</code> 在第 1 维把两个 <span class="mono">(T,)</span> 拼成 <span class="mono">(T, 2)</span>，每一行是一个分布 (p, 1−p)。<code>sum(dim=1)</code> 再把每一行的两项加起来。<code>dim</code> 这个参数后面几乎每节课都会用：<strong>沿哪一维做运算，那一维就被消掉</strong>。</p>
+</details>
+<p class="muted" style="font-size:.88rem">环境提示：本机 <code>python3</code> 还没装 torch，先按仓库 README 建好 <code>.venv</code>。第 1 课的练习 C（<code>make_rule</code>）如果还没做，可以和这题一起跑。</p>
+</div>
+
+<h2>延伸阅读</h2>
+<p><strong>主读：</strong>Cover &amp; Thomas，<em>Elements of Information Theory</em> 第 2 章前几节：熵的定义、二元熵的例子，以及 Jensen 不等式和 H ≤ log|𝒳| 的证明<sup class="cite"><a href="#src2">[2]</a></sup>。读完可以对照本课第 2 节，看证明思路是否一致。</p>
+<p><strong>选读：</strong>Shannon 1948 年原文第 6 节，他先列出一个「不确定性度量」应该满足的几条要求，再证明满足要求的只有 −Σ p log p 这一种形式<sup class="cite"><a href="#src1">[1]</a></sup>。</p>
+
+<p class="ask box plain">有不清楚的地方，直接在终端问我。比如「为什么惊讶度要取对数」，或者「练习 C 报形状错误」。做完后把练习 A、C 的结果告诉我。第 3 课会把转换次数、单格熵、gzip 压缩长度放在一起比较，看清 notebook 那张总结表为什么写成「先升后降」。</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">C. E. Shannon, <a href="https://doi.org/10.1002/j.1538-7305.1948.tb01338.x">"A Mathematical Theory of Communication"</a>, <em>Bell System Technical Journal</em> 27 (1948)：熵的定义与唯一性。</li>
+<li id="src2">T. M. Cover, J. A. Thomas, <em>Elements of Information Theory</em>, 2nd ed., Wiley, 2006, 第 2 章：熵、Jensen 不等式、均匀分布取最大熵。</li>
+<li id="src3">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.unique.html">torch.unique</a>、<a href="https://docs.pytorch.org/docs/stable/generated/torch.bincount.html">torch.bincount</a>、<a href="https://docs.pytorch.org/docs/stable/generated/torch.histc.html">torch.histc</a>、<a href="https://docs.pytorch.org/docs/stable/special.html#torch.special.xlogy">torch.special.xlogy</a>。</li>
+<li id="src4">Aaronson, <a href="https://scottaaronson.blog/?p=762">The First Law of Complexodynamics</a>, Shtetl-Optimized, 2011-09-23。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0001-rule30-from-number-to-tensor.html">← 第 1 课：Rule 30</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0003-measure-traps.html">下一课：度量的陷阱 →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../assets/ca.js"></script>
+<script src="../assets/entropy.js"></script>
+</body>
+</html>

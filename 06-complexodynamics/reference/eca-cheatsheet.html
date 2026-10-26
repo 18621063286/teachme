@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>初等元胞自动机速查</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+<p class="kicker">参考 · 速查</p>
+<h1>初等元胞自动机</h1>
+<p class="subtitle">规则号 ↔ 规则表 ↔ 布尔式 ↔ PyTorch。来自 <a href="../lessons/0001-rule30-from-number-to-tensor.html">第 1 课</a>。</p>
+
+<h2>编码</h2>
+<div class="box plain"><p style="margin:0; text-align:center" class="mono">k = 4l + 2c + r　　new = (n &gt;&gt; k) &amp; 1</p></div>
+<p>邻域从 111（k=7）排到 000（k=0）时，输出那一列从左往右读就是规则号的二进制<sup class="cite"><a href="https://www.wolframscience.com/nks/p53--more-cellular-automata/">NKS p.53</a></sup>。</p>
+
+<table>
+<tr><th class="l">l c r</th><td class="mono">111</td><td class="mono">110</td><td class="mono">101</td><td class="mono">100</td><td class="mono">011</td><td class="mono">010</td><td class="mono">001</td><td class="mono">000</td><th class="l">布尔式</th></tr>
+<tr><th class="l">Rule 30</th><td>0</td><td>0</td><td>0</td><td>1</td><td>1</td><td>1</td><td>1</td><td>0</td><td class="l mono">l ⊕ (c ∨ r)</td></tr>
+<tr><th class="l">Rule 90</th><td>0</td><td>1</td><td>0</td><td>1</td><td>1</td><td>0</td><td>1</td><td>0</td><td class="l mono">l ⊕ r</td></tr>
+</table>
+
+<h2>Rule 30 布尔式的证明（两种情况）</h2>
+<ul>
+<li>c ∨ r = 0（100, 000）：新状态等于 l，而 l ⊕ 0 = l。</li>
+<li>c ∨ r = 1（其余 6 种）：新状态等于 ¬l，而 l ⊕ 1 = ¬l。</li>
+</ul>
+<p>口诀：中间和右边都空，就抄左邻居；只要有一个不空，就把左邻居取反。</p>
+
+<h2>PyTorch</h2>
+<pre><code>left   = torch.roll(x,  1)   # left[i]  = x[i-1]，周期边界
+right  = torch.roll(x, -1)   # right[i] = x[i+1]
+x_next = left ^ (x | right)  # Rule 30，整行逐元素运算
+
+def make_rule(n):            # 任意 0–255 规则
+    table = torch.tensor([(n &gt;&gt; k) &amp; 1 for k in range(8)])
+    return lambda l, c, r: table[4*l + 2*c + r]   # 高级索引查表</code></pre>
+
+<table>
+<tr><th class="l">易错点</th><th class="l">正确理解</th></tr>
+<tr><td class="l"><code>roll(x, 1)</code> 是「右移」，所以是右邻居？</td><td class="l">内容右移以后，第 i 位放的是 x[i−1]，所以是<strong>左</strong>邻居。</td></tr>
+<tr><td class="l">边界补 0？</td><td class="l">roll 是循环移位，边界是周期的。咖啡扩散用的才是 replicate。</td></tr>
+</table>
+
+<nav class="pager"><a href="glossary.html">术语表</a><a href="../lessons/0001-rule30-from-number-to-tensor.html">第 1 课</a></nav>
+</main>
+</body>
+</html>
