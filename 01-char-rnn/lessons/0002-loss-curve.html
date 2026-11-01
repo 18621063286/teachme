@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>损失与假曲线</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 2 课 · RNN 的不合理有效性</p>
+<h1>那条漂亮的损失曲线是假的</h1>
+<p class="subtitle">从 ln V 和指数平滑推出 80 的来历，再找到被它盖住的回弹</p>
+
+<p>Notebook 第 4 节画的损失曲线从约 80 平滑地降到约 5，看上去训练得很好。可是 24 个字符的词表，瞎猜的损失也才约 3.18。这个 80 从哪来？</p>
+
+<p class="win"><strong>本课收获：</strong>你能算出一个没学过的模型损失应该是多少，用公式拆开 notebook 的曲线，并知道看训练曲线时先核对哪几件事。这也回答了 notebook 的思考题 4。</p>
+
+<h2>1　起点应该是多少</h2>
+
+<p>单步交叉熵是 <span class="mono">−ln p(正确字符)</span>。一个什么都没学的模型对 V 个字符一视同仁，<span class="mono">p = 1/V</span>，所以：</p>
+<div class="box plain"><p style="text-align:center; margin:0" class="mono">初始损失 ≈ −ln(1/V) = ln V</p></div>
+<p>这是每次训练都该做的第一项检查。起点对不上，通常就是哪里算错了。</p>
+
+<div class="exercise">
+<h3>练习 A：算起点</h3>
+<p>V = 24。<span class="mono">ln 24</span> 保留两位小数：</p>
+<div class="num" data-answer="3.18" data-tol="0.01" data-placeholder="ln 24" data-hint="ln 24 = 3 ln 2 + ln 3 ≈ 2.079 + 1.099。" data-explain="约 3.178。我实测第 1 步的损失是 3.178，完全对得上。"></div>
+<p>如果把 25 个字符的损失<strong>加起来</strong>，起点又是多少？</p>
+<div class="num" data-answer="79.45" data-tol="0.1" data-placeholder="25 × ln 24" data-hint="乘以 25。" data-explain="79.45，就是曲线起点约 80 的来历。"></div>
+</div>
+
+<h2>2　两种尺度混在了一起</h2>
+
+<p>对照 Karpathy 的 min-char-rnn 和 notebook<sup class="cite"><a href="#src2">[2]</a></sup>：</p>
+
+<pre><code># min-char-rnn：loss 是 25 步的总和
+loss += -np.log(ps[t][targets[t],0])
+smooth_loss = -np.log(1.0/vocab_size)*seq_length   # 初值也是总和，正确
+
+# notebook：初值抄了过来，loss 却变成平均
+criterion = nn.CrossEntropyLoss()                  # 默认 reduction='mean'
+smooth_loss = -np.log(1.0 / vocab_size) * seq_length
+smooth_loss = smooth_loss * 0.999 + loss.item() * 0.001</code></pre>
+
+<p><code>nn.CrossEntropyLoss</code> 默认取平均<sup class="cite"><a href="#src3">[3]</a></sup>。于是平滑值的初值是 79.45，每步混入的却是约 3 的数。曲线下降的主要是这个错误初值在慢慢衰减。</p>
+
+<div class="proof">
+<p><strong>展开递推。</strong>令 <span class="mono">s_n = β s_{n−1} + (1 − β) l_n</span>，β = 0.999。反复代入得</p>
+<p style="text-align:center"><span class="mono">s_n = βⁿ s₀ + (1 − β) Σ_{i=1..n} β^{n−i} l_i</span></p>
+<p><strong>两条曲线相减。</strong>同一串真实损失 l，用两个不同的初值 s₀ 和 s₀′ 平滑，第二项完全相同，所以</p>
+<p style="text-align:center"><span class="mono">s_n − s_n′ = βⁿ (s₀ − s₀′)</span></p>
+<p>初值的差只按 βⁿ 衰减，和模型学得好不好毫无关系。<span class="qed">∎</span></p>
+</div>
+
+<p>代入 n = 3000：<span class="mono">0.999³⁰⁰⁰ ≈ 0.0497</span>，<span class="mono">s₀ − s₀′ = 79.45 − 3.18 = 76.27</span>，差值应该是 3.79。我实测 notebook 曲线的终点是 4.92，初值改成 ln V 后的终点是 1.13，差值正好 3.79。</p>
+
+<div class="exercise">
+<h3>练习 B：半衰期</h3>
+<p>错误初值要多少步才衰减一半？已知 <span class="mono">ln 0.999 ≈ −0.001</span>，<span class="mono">ln 2 ≈ 0.693</span>。</p>
+<div class="num" data-answer="693" data-tol="5" data-placeholder="步数" data-hint="解 0.999ⁿ = 1/2，两边取对数。" data-explain="n ≈ 0.693 / 0.001 = 693。3000 步只有约 4.3 个半衰期，所以到结束时还没衰减干净。"></div>
+</div>
+
+<h2>3　被盖住的东西</h2>
+
+<p>下面是实测数据。先看 notebook 的曲线（红）和真实损失（贴在底部的黑线），再点「换成真实损失」，纵轴会放大。</p>
+
+<div class="loss-chart"></div>
+
+<p>lr = 0.01 时，真实损失在约 800 步从 0.18 跳回 2.3，之后再也回不去：最后 500 步平均 0.71。红线对这一切几乎没有反应。这就是上一课最后说的回弹。训练结束时，这个模型读到 <code>hell</code> 预测的是空格，不是 o。</p>
+
+<h3>回弹的原因是学习率</h3>
+
+<p>我用不同学习率各跑了 3 个种子，再关掉梯度裁剪各跑 3 个，每次 3000 步：</p>
+
+<table>
+<tr><th class="l">设置</th><th>回弹（200 步均值跳升超过 1）</th><th>最后 500 步平均损失</th></tr>
+<tr><td class="l">lr = 0.01（notebook）</td><td>2 / 3</td><td>0.71、0.85、1.03</td></tr>
+<tr><td class="l">lr = 0.01，不裁剪</td><td>2 / 3</td><td>1.13、1.23、1.57</td></tr>
+<tr><td class="l">lr = 0.003</td><td>0 / 3</td><td>0.006、0.007、0.007</td></tr>
+<tr><td class="l">lr = 0.001</td><td>0 / 3</td><td>0.033、0.024、0.059</td></tr>
+</table>
+
+<p>学习率降到 0.003，损失比原来低了约 100 倍。这里有三点要读准：</p>
+<ul>
+<li><strong>梯度裁剪没有阻止回弹。</strong>思考题 4 问它如何防止不稳定。它做的事很简单：若梯度总范数 ‖g‖ 超过 c，就把 g 缩放成 <span class="mono">g · c / ‖g‖</span>，方向不变<sup class="cite"><a href="#src4">[4]</a></sup>。它限制单步冲击，确实略有帮助（不裁剪时损失更高），但学习率太大时救不回来。lr = 0.01 时，3000 步里有 423 到 436 步触发了裁剪；lr = 0.003 时只有 23 到 35 步。</li>
+<li><strong>同一个种子，不同机器回弹时间不同。</strong>种子 42 在我的 Mac 上要到 1000 步之后才回弹，在 DGX Spark 上约 800 步。所以别只看某一次的时间点，要看统计。</li>
+<li><strong>回弹之后为什么回不来，我只有相关证据。</strong>回弹后，<span class="mono">|h| &gt; 0.99</span> 的单元比例从约 0.4 升到 0.89，而 lr = 0.003 时最后只有 0.18。下面的导数说明了为什么这很可能有害，但我没有做实验把它单独分离出来。</li>
+</ul>
+
+<div class="exercise">
+<h3>练习 C：饱和的代价</h3>
+<p><span class="mono">tanh′(z) = 1 − tanh²(z)</span>。单元的值 h = tanh(z) = 0.99 时，导数是多少？</p>
+<div class="num" data-answer="0.0199" data-tol="0.0005" data-placeholder="tanh′" data-hint="1 − 0.99²。" data-explain="1 − 0.9801 = 0.0199。通过这个单元的梯度被压到约 2%。第 3 课会看到它连乘起来的后果。"></div>
+</div>
+
+<div class="exercise">
+<h3>练习 D：写一个正确的平滑</h3>
+<p>补全 <code>ema</code>，然后运行（命令见<a href="0001-same-l-two-answers.html">第 1 课</a>）。这个练习不需要 torch，用普通 <code>python3</code> 也行。</p>
+<pre><code>import math
+
+
+def ema(raw, init, beta=0.999):
+    # 返回平滑后的列表，长度与 raw 相同，第一个值是 beta*init + (1-beta)*raw[0]
+    ...
+
+
+raw = [3.18] * 3000
+wrong = ema(raw, 3.18 * 25)
+right = ema(raw, 3.18)
+assert len(wrong) == 3000
+assert abs(right[-1] - 3.18) &lt; 1e-9, "初值正确时，损失不变，平滑值也不该变"
+assert abs((wrong[-1] - right[-1]) - (3.18 * 24) * 0.999 ** 3000) &lt; 1e-6
+print("全部通过")
+print("损失一直是 3.18、完全没学，错误曲线却从", round(wrong[0], 2), "降到", round(wrong[-1], 2))</code></pre>
+<details><summary>写完再看参考解答</summary>
+<pre><code>def ema(raw, init, beta=0.999):
+    out, s = [], init
+    for l in raw:
+        s = beta * s + (1 - beta) * l
+        out.append(s)
+    return out</code></pre>
+<p>这份解答我跑过。注意打印结果：模型完全没学，曲线也会一路下降。</p>
+</details>
+</div>
+
+<h2>4　不看上文，回答</h2>
+
+<div class="quiz" data-answer="1">
+<p class="q">词表 V = 100，未训练模型的平均交叉熵大约是多少？</p>
+<ol><li>约为 2.30</li><li>约为 4.61</li><li>约为 6.64</li><li>约为 100</li></ol>
+<p class="explain">ln 100 ≈ 4.61。6.64 是以 2 为底的 log₂100，PyTorch 的交叉熵用自然对数。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">两条 EMA 曲线用同样的 l、不同的初值，它们的差取决于什么？</p>
+<ol><li>真实损失的大小</li><li>模型的学习速度</li><li>梯度裁剪的阈值</li><li>初值差与步数 n</li></ol>
+<p class="explain">s_n − s_n′ = βⁿ(s₀ − s₀′)，式子里没有 l。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">复习第 1 课：<code>W_hh</code> 为 0 时，"hello" 的最低平均损失是多少？</p>
+<ol><li>(ln 2)/2</li><li>(ln 4)/2</li><li>ln 24/2</li><li>恒为零</li></ol>
+<p class="explain">两个 l 只能各给 l、o 一半概率，4 步合计 2 ln 2，平均 (ln 2)/2 ≈ 0.3466。</p>
+</div>
+
+<h2>接下来</h2>
+<p><strong>去读原文：</strong>Karpathy 的 <a href="https://gist.github.com/karpathy/d4dee566867f8291f086">min-char-rnn</a>，约 100 行。第 43、60、84、101 行分别是损失求和、裁剪、初值和平滑。它的初值是对的。</p>
+<p class="ask box plain">有不清楚的地方，直接在终端问我。做完后告诉我练习的结果，再回答一句：如果想让 notebook 的曲线变对，只改一个字符或一个参数，你会改哪里？</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">A. Karpathy, <a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">"The Unreasonable Effectiveness of Recurrent Neural Networks"</a>, 2015。</li>
+<li id="src2">A. Karpathy, <a href="https://gist.github.com/karpathy/d4dee566867f8291f086">min-char-rnn</a>；胡嘉玺 notebook <span class="mono">ch02/char_rnn_pytorch.ipynb</span>，第 3.2 节。</li>
+<li id="src3">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html">nn.CrossEntropyLoss</a>。</li>
+<li id="src4">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html">clip_grad_norm_</a>；R. Pascanu, T. Mikolov, Y. Bengio, <a href="https://arxiv.org/abs/1211.5063">"On the difficulty of training recurrent neural networks"</a>, 2013。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0001-same-l-two-answers.html">← 第 1 课：同一个 l</a> · <a href="../reference/rnn-cheatsheet.html">速查</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0003-truncated-bptt.html">下一课：截断 BPTT →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../../assets/num.js"></script>
+<script src="../assets/loss-chart.js"></script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>截断 BPTT</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 3 课 · RNN 的不合理有效性</p>
+<h1>截断 BPTT：一行 detach 决定它能记多远</h1>
+<p class="subtitle">状态一直往前传，梯度只回传 25 步。这两件事的差别，就是 RNN 记忆的边界</p>
+
+<p>Notebook 的训练循环里，有一行很容易被当成样板代码：</p>
+<pre><code>h = h.detach()                  # 分離隱藏狀態（截斷 BPTT）
+outputs, _, h = model(inputs, h)</code></pre>
+
+<p class="win"><strong>本课收获：</strong>你能说清这行删掉会怎样，推导梯度为什么随距离衰减，并能用实验结果预测：窗口长度决定模型能学会多远的依赖。</p>
+
+<h2>1　数据怎么切</h2>
+
+<p><code>get_batch</code> 把文本切成长 25 的块，目标是输入右移一位。下一块从上一块的终点接着走，所以一块的最后一个隐藏状态，正好是下一块的起点。</p>
+
+<pre><code>inputs  = data[start     : start + 25]
+targets = data[start + 1 : start + 26]
+# 下一轮 start += 25</code></pre>
+
+<div class="exercise">
+<h3>练习 A：算一遍</h3>
+<p>文本 8760 个字符，每步走 25 个。走完一遍大约要多少步？</p>
+<div class="num" data-answer="350" data-tol="1" data-placeholder="步数" data-hint="8760 / 25，最后不足一块的部分不算。" data-explain="约 350 步。3000 步大约走 8.6 遍，每走完一遍 notebook 会把 h 清零。"></div>
+</div>
+
+<h2>2　detach 切断的是梯度，不是状态</h2>
+
+<p><code>h.detach()</code> 返回一个数值相同、但和计算图断开的张量。所以：</p>
+<table>
+<tr><th class="l"></th><th>前向：h 的数值</th><th>反向：梯度</th></tr>
+<tr><td class="l">块内</td><td>传递</td><td>回传</td></tr>
+<tr><td class="l">跨块（detach）</td><td><strong>传递</strong></td><td><strong>不回传</strong></td></tr>
+<tr><td class="l">跨块（每块清零）</td><td>不传递</td><td>不回传</td></tr>
+</table>
+
+<p>删掉这一行会怎样？第二次 <code>backward()</code> 要穿过第一块的计算图，而那张图已经被释放了。我实际跑出来的错误是：</p>
+<pre><code>RuntimeError: Trying to backward through the graph a second time ...</code></pre>
+<p>即使保留计算图不报错，图也会随文本一直变长，内存和时间都撑不住。Karpathy 的实验也是这样截断的，他用的长度是 100 个字符<sup class="cite"><a href="#src1">[1, Paul Graham generator]</a></sup>。</p>
+
+<p>状态跨块传递有没有用？我用 lr = 0.003 跑了同样的 3000 步，只改一处：</p>
+<table>
+<tr><th class="l">跨块时</th><th>最后 500 步平均损失</th></tr>
+<tr><td class="l"><code>h.detach()</code>（notebook 的做法）</td><td>0.006</td></tr>
+<tr><td class="l">每块把 h 清零</td><td>0.225</td></tr>
+</table>
+<p>只跑了一个种子，但差了约 37 倍。清零后，每块开头的字符完全没有上下文，这部分损失怎么也降不下来。</p>
+
+<h2>3　推导：梯度为什么随距离衰减</h2>
+
+<div class="proof">
+<p><strong>一步。</strong>记 <span class="mono">h_t = tanh(z_t)</span>，<span class="mono">z_t = W_xh x_t + W_hh h_{t−1} + b_h</span>。由链式法则，</p>
+<p style="text-align:center"><span class="mono">∂h_t / ∂h_{t−1} = D_t W_hh，　D_t = diag(1 − h_t²)</span></p>
+<p><strong>k 步。</strong>连乘：</p>
+<p style="text-align:center"><span class="mono">∂h_t / ∂h_{t−k} = D_t W_hh · D_{t−1} W_hh ⋯ D_{t−k+1} W_hh</span></p>
+<p><strong>上界。</strong>矩阵范数满足次乘性，又有 <span class="mono">‖D‖ ≤ 1</span>，所以</p>
+<p style="text-align:center"><span class="mono">‖∂h_t / ∂h_{t−k}‖ ≤ ‖W_hh‖ᵏ</span></p>
+<p>若 W_hh 的最大奇异值小于 1，这个界随 k 指数趋于 0。这就是梯度消失的充分条件<sup class="cite"><a href="#src2">[2]</a></sup>。<span class="qed">∎</span></p>
+</div>
+
+<p>反过来，范数大于 1 时连乘可能爆炸，这才需要第 2 课的梯度裁剪。注意上界只说明小于 1 时一定消失；大于 1 时只是有可能爆炸<sup class="cite"><a href="#src2">[2]</a></sup>。</p>
+
+<div class="exercise">
+<h3>练习 B：连乘有多快</h3>
+<p>简化成标量，每步乘 0.9。已知 <span class="mono">0.9¹⁰ ≈ 0.349</span>，回传 20 步后还剩多少？</p>
+<div class="num" data-answer="0.122" data-tol="0.003" data-placeholder="0.9²⁰" data-hint="0.349 的平方。" data-explain="约 0.122，50 步后约 0.005。"></div>
+<p>第 2 课的饱和也算进来：若单元值约 0.99，那一步的 D 约 0.02。这对连乘意味着每过一步大约剩下原来的几分之几？（填小数）</p>
+<div class="num" data-answer="0.02" data-tol="0.002" data-placeholder="比例" data-hint="D = 1 − h²。这里先不算 W_hh。" data-explain="约 0.02。这正是饱和有害的原因：连乘里每多一个这样的因子，信号就少两个数量级。"></div>
+</div>
+
+<p>实测一下。下表是训练好的模型里，最后一步的损失对 k 步之前隐藏状态的梯度范数，取 20 个位置的中位数，并以 k = 0 为 1：</p>
+
+<table>
+<tr><th class="l">k（回传步数）</th><td>0</td><td>2</td><td>5</td><td>10</td><td>20</td><td>30</td><td>50</td></tr>
+<tr><th class="l">lr = 0.003</th><td>1</td><td>0.68</td><td>0.45</td><td>0.23</td><td>0.042</td><td>0.0076</td><td>0.00072</td></tr>
+<tr><th class="l">lr = 0.01（饱和更严重）</th><td>1</td><td>0.96</td><td>0.55</td><td>0.18</td><td>0.0092</td><td>0.00089</td><td>0.000003</td></tr>
+</table>
+<p>到 50 步时，饱和严重的模型只剩百万分之三，另一个还有万分之七。这和第 2 课的怀疑方向一致：饱和严重的模型，远距离梯度衰减得更快。不过这只比较了两个模型，近距离时差别也不大，算佐证，不算证明。</p>
+
+<h2>4　窗口决定能学多远</h2>
+
+<p>我造了一个专门测记忆的任务。文本由这样的片段组成：一个随机字母（a 或 b），k 个横线，再重复一次那个字母。例如 k = 3 时是 <code>a---a b---b</code>，这里为了看清加了空格。要预测对最后的字母，模型必须记住 k 步以前的东西。</p>
+
+<p>H = 64，总共读 30 万字符，lr = 0.002，每种设置跑 3 个种子，下面是预测最后字母的准确率（瞎猜是 0.5）：</p>
+
+<table>
+<tr><th class="l">距离 k</th><th>窗口 5</th><th>窗口 25</th><th>窗口 100</th></tr>
+<tr><td class="l">3</td><td>1.00、1.00、1.00</td><td>1.00、1.00、1.00</td><td>1.00、1.00、1.00</td></tr>
+<tr><td class="l">10</td><td>0.47、0.40、0.48</td><td>1.00、1.00、0.52</td><td>1.00、0.93、1.00</td></tr>
+<tr><td class="l">20</td><td>0.00、0.00、0.00</td><td>0.00、0.00、0.00</td><td>0.91、0.99、0.00</td></tr>
+</table>
+
+<p>准确率 0.00 不是比瞎猜还差：模型根本没学会那个位置要结束，一直预测横线。规律很清楚：距离短于窗口才可能学会。但这不是一道硬边界，k = 20、窗口 25 也全部失败，k = 10、窗口 25 还有一次失败，因为窗口够长只是必要条件，第 3 节的衰减还在起作用。这里三种窗口读的字符数相同，更新次数相差 20 倍，所以窗口 100 的结果也包含了这个因素。</p>
+
+<p>这也解释了下一篇论文的动机：要记得更远，光拉长窗口不够，得改变连乘本身，这就是 LSTM 要做的事<sup class="cite"><a href="#src1">[1, Getting fancy]</a></sup>。</p>
+
+<div class="exercise">
+<h3>练习 C：写训练循环</h3>
+<p>补全带 <code>detach</code> 的循环。这个文件还会验证删掉 detach 时确实报错。</p>
+<pre><code>import torch
+import torch.nn.functional as F
+
+text = "hello " * 400
+vocab = sorted(set(text))
+data = torch.tensor([vocab.index(c) for c in text])
+V, H, SL = len(vocab), 16, 5
+
+
+def make():
+    torch.manual_seed(0)
+    return [torch.randn(H, V, requires_grad=True), torch.randn(H, H, requires_grad=True),
+            torch.randn(V, H, requires_grad=True)]
+
+
+def forward(P, idx, h):
+    W_xh, W_hh, W_hy = P
+    out = []
+    for i in idx:
+        h = torch.tanh(W_xh[:, [i]] + W_hh @ h)
+        out.append((W_hy @ h).squeeze(1))
+    return torch.stack(out), h
+
+
+def train(P, steps, detach=True):
+    opt = torch.optim.Adam(P, lr=0.01)
+    h = torch.zeros(H, 1)
+    ptr, loss = 0, None
+    for _ in range(steps):
+        if ptr + SL + 1 &gt;= len(data):
+            ptr, h = 0, torch.zeros(H, 1)
+        # 在这里补全：取 x、y，按 detach 决定是否断开 h，前向，算交叉熵，
+        # zero_grad，backward，step，并把 ptr 往前移
+        ...
+    return loss.item()
+
+
+loss = train(make(), 300)
+assert loss &lt; 0.2, f"损失应该很低，现在是 {loss}"
+try:
+    train(make(), 3, detach=False)
+    raise SystemExit("不 detach 应该报错")
+except RuntimeError as e:
+    assert "second time" in str(e)
+print("全部通过，最终损失", round(loss, 4))</code></pre>
+<details><summary>写完再看参考解答</summary>
+<pre><code>        x, y = data[ptr:ptr + SL], data[ptr + 1:ptr + SL + 1]
+        if detach:
+            h = h.detach()
+        out, h = forward(P, x, h)
+        loss = F.cross_entropy(out, y)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        ptr += SL</code></pre>
+<p>这份解答我跑过，断言全部通过。</p>
+</details>
+</div>
+
+<h2>5　不看上文，回答</h2>
+
+<div class="quiz" data-answer="2">
+<p class="q"><code>h.detach()</code> 之后，下一块开始时 h 的数值如何？</p>
+<ol><li>全部清零重来</li><li>随机重新生成</li><li>数值保持不变</li><li>全部变成一值</li></ol>
+<p class="explain">detach 只断开计算图，不改数值。所以状态能跨块，梯度不能。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">窗口 25 的模型，依赖距离 20 也可能学不会。最直接的原因是什么？</p>
+<ol><li>权重共享失效了</li><li>长距离梯度太小</li><li>词表大小不够了</li><li>状态不能传过去</li></ol>
+<p class="explain">窗口内的梯度仍要连乘衰减。窗口够长是必要条件，不是充分条件。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">复习第 2 课：梯度范数超过阈值时，裁剪做了什么？</p>
+<ol><li>把梯度全部清零</li><li>跳过这一步更新</li><li>把学习率降一半</li><li>等比例缩小梯度</li></ol>
+<p class="explain">g ← g · c / ‖g‖，方向不变，只缩小长度。</p>
+</div>
+
+<h2>接下来</h2>
+<p><strong>去读原文：</strong><a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">Karpathy 原文</a>的 "Getting fancy" 一段和 "Paul Graham generator" 里的技术参数。想看严格分析，读 Pascanu 等人论文<sup class="cite"><a href="#src2">[2]</a></sup>的第 2 节。</p>
+<p class="ask box plain">有不清楚的地方，直接在终端问我。做完后告诉我练习 C 的结果，再回答一句：训练时 k = 10 的依赖在窗口 5 下学不会，那推理时 h 不也是一直往前传的吗，为什么还是用不上？</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">A. Karpathy, <a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">"The Unreasonable Effectiveness of Recurrent Neural Networks"</a>, 2015。引用标的是文中的小节名。</li>
+<li id="src2">R. Pascanu, T. Mikolov, Y. Bengio, <a href="https://arxiv.org/abs/1211.5063">"On the difficulty of training recurrent neural networks"</a>, ICML 2013。</li>
+<li id="src3">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.detach.html">Tensor.detach</a>。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0002-loss-curve.html">← 第 2 课：假曲线</a> · <a href="../reference/rnn-cheatsheet.html">速查</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0004-temperature.html">下一课：采样与温度 →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../../assets/num.js"></script>
+</body>
+</html>

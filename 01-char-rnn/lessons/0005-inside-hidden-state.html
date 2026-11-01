@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拆开隐藏状态</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 5 课 · RNN 的不合理有效性</p>
+<h1>拆开隐藏状态，核对 notebook 的结论</h1>
+<p class="subtitle">写死的 print 不是证据。把它量一遍，再和内建 nn.RNN 对上号</p>
+
+<p>Notebook 第 6 节画完热图后打印了三句「观察」。这三句是直接写在 <code>print</code> 里的，不管模型训练成什么样都会输出：</p>
+<pre><code>print("• 某些隱藏單元對特定字元（如空格）反應強烈")
+print("• 隱藏狀態在詞邊界處有明顯變化")
+print("• 這展示了 RNN 如何『記住』和『編碼』序列資訊")</code></pre>
+
+<p class="win"><strong>本课收获：</strong>你能把一句定性结论变成可以计算的量，知道 <code>nn.RNN</code> 和手写版差在哪，并完成这门课的结业作业。这也回答了 notebook 的思考题 3。</p>
+
+<h2>1　把结论变成数字</h2>
+
+<p>「词边界处变化明显」可以这样量：计算相邻两步的 <span class="mono">‖h_t − h_{t−1}‖</span>，比较读到空格或换行的时候和其他时候。「单元对空格反应强烈」可以这样量：每个单元的值和「当前是否空格」的相关系数。</p>
+
+<p>我在 438 字符的完整文本上算了三个模型（均为 3000 步，种子 42）：</p>
+
+<table>
+<tr><th class="l">模型</th><th>‖Δh‖：边界处</th><th>‖Δh‖：其他</th><th>最大 |相关|</th><th>|h| &gt; 0.9 的比例</th><th>下一字符准确率</th></tr>
+<tr><td class="l">lr = 0.01（notebook）</td><td>6.30</td><td>7.11</td><td>0.47</td><td>93.6%</td><td>73.9%</td></tr>
+<tr><td class="l">lr = 0.003</td><td>12.69</td><td>12.81</td><td>0.44</td><td>46.0%</td><td>99.8%</td></tr>
+<tr><td class="l">lr = 0.001</td><td>11.87</td><td>11.96</td><td>0.46</td><td>39.2%</td><td>99.3%</td></tr>
+</table>
+
+<p>结果和 print 的说法不符：</p>
+<ul>
+<li><strong>词边界处的变化并不更大。</strong>三个模型都是边界处略小或几乎相等。</li>
+<li><strong>没有单元和空格强相关。</strong>128 个单元里，三个模型都没有相关系数超过 0.5 的。</li>
+<li><strong>第三句没有被这张图证明。</strong>Notebook 的 lr = 0.01 模型有 93.6% 的值挤在 ±1 附近，热图上那些深红深蓝主要是饱和，不是有意义的结构。</li>
+</ul>
+
+<div class="box">
+<p><strong>但这不代表 RNN 没有编码信息。</strong>lr = 0.003 的模型准确率 99.8%，上下文显然就在 h 里。只是它分散在许多单元上，<code>W_hy</code> 的线性组合能读出来，单看一个单元看不出来。我的相关系数只测单个单元，所以只能否定「某个单元」这种说法。</p>
+<p>Karpathy 确实找到过可解释的单元，比如 URL 内外、引号内外。但那是在大数据上训练的 LSTM，他估计约 5% 的单元有趣，大部分解释不了，并直言这些结论有点「hand-wavy」，隐藏状态是高度分布式的表示<sup class="cite"><a href="#src1">[1, Visualizing the predictions]</a></sup>。这和 notebook 的玩具模型不是一回事。</p>
+</div>
+
+<div class="exercise">
+<h3>练习 A：读数据</h3>
+<p>lr = 0.003 模型在边界处的 ‖Δh‖ 比其他位置大百分之几？（比它小就填负数，保留一位小数）</p>
+<div class="num" data-answer="-0.9" data-tol="0.1" data-placeholder="百分比" data-hint="(12.69 − 12.81) / 12.81 × 100。" data-explain="约 −0.9%。比其他位置还略小，谈不上明显变化。"></div>
+</div>
+
+<h2>2　tanh 是必须的吗</h2>
+
+<p>思考题 3 问为什么用 tanh 而不用 ReLU。我把手写版的 tanh 换成 ReLU，其他不变（裁剪 5.0，3000 步，3 个种子）：</p>
+
+<table>
+<tr><th class="l">激活函数</th><th>lr</th><th>最后 500 步平均损失</th><th>h 的最大值</th></tr>
+<tr><td class="l">tanh</td><td>0.003</td><td>0.006、0.007、0.007</td><td>≤ 1</td></tr>
+<tr><td class="l">ReLU</td><td>0.003</td><td>0.059、0.071、0.050</td><td>11 到 14</td></tr>
+<tr><td class="l">ReLU</td><td>0.001</td><td>0.056、0.051、0.067</td><td>19 到 401</td></tr>
+</table>
+
+<p>ReLU 也能学，没有出现 NaN，只是这里损失高了约 10 倍。差别在于 ReLU 没有上界：状态可能越滚越大，这正是第 3 课说的范数大于 1 时那种爆炸的土壤。tanh 把状态关在 (−1, 1) 里，代价是第 3 课看到的饱和和梯度衰减。这是取舍，不是对错。这里只是一个玩具数据上有裁剪的结果，不足以推广。</p>
+
+<h2>3　内建 nn.RNN 和手写版</h2>
+
+<p>Notebook 第 8 节标题叫「比较」，其实只建了模型、打印了参数量，没有训练。我把比较做完。</p>
+
+<p>先看对应关系。Karpathy 的公式就是 <code>nn.RNN</code> 默认的计算<sup class="cite"><a href="#src2">[2]</a></sup>：</p>
+
+<table>
+<tr><th class="l">手写</th><th class="l">nn.RNN 里的名字</th><th class="l">说明</th></tr>
+<tr><td class="l mono">W_xh</td><td class="l mono">weight_ih_l0</td><td class="l">输入到隐藏</td></tr>
+<tr><td class="l mono">W_hh</td><td class="l mono">weight_hh_l0</td><td class="l">隐藏到隐藏</td></tr>
+<tr><td class="l mono">b_h</td><td class="l mono">bias_ih_l0 + bias_hh_l0</td><td class="l">内建有两个偏置，相加才是一个 b_h</td></tr>
+<tr><td class="l mono">W_hy, b_y</td><td class="l">另外的 <code>nn.Linear</code></td><td class="l">nn.RNN 只管隐藏状态，不含输出层</td></tr>
+</table>
+
+<p>把手写版的权重拷进 <code>nn.RNN</code>，同一段 100 字符的输入，两边输出的最大差别是 <span class="mono">1.25 × 10⁻⁶</span>，只是浮点误差。它们是同一个模型。</p>
+
+<p>Notebook 的内建版参数更多（39192 对 22680），不是因为 RNN 不同，而是它先用了 <code>nn.Embedding</code> 把字符变成 128 维，于是输入权重从 128×24 变成 128×128，还多了一个 3072 的嵌入矩阵和一个偏置。</p>
+
+<div class="exercise">
+<h3>练习 B：算参数</h3>
+<p>Notebook 的内建版：Embedding 24×128，<code>weight_ih</code> 128×128，<code>weight_hh</code> 128×128，两个偏置各 128，<code>fc</code> 权重 24×128，<code>fc</code> 偏置 24。验证总数：</p>
+<div class="num" data-answer="39192" data-tol="0" data-placeholder="参数总数" data-hint="3072 + 16384 + 16384 + 128 + 128 + 3072 + 24。" data-explain="39192，和我实际用 numel 统计的一致。"></div>
+</div>
+
+<h3>要不要 GPU</h3>
+<p>我在 DGX Spark（NVIDIA GB10）上测了速度。CPU 和 GPU 都是这台机器：</p>
+<table>
+<tr><th class="l">写法</th><th>CPU</th><th>GPU</th></tr>
+<tr><td class="l">手写循环（iter/s，每 iter 25 字符）</td><td>102</td><td>119</td></tr>
+<tr><td class="l">内建，批量 1（iter/s）</td><td>194</td><td>379</td></tr>
+<tr><td class="l">内建，批量 64（字符/s）</td><td>15.4 万</td><td>70 万</td></tr>
+<tr><td class="l">内建，批量 1024（字符/s）</td><td>54.6 万</td><td>784 万</td></tr>
+</table>
+<p>手写的逐字符循环上 GPU 几乎没有好处，每步只算很小的矩阵乘法，GPU 的并行用不上。这本 notebook 用 CPU 就够了。GPU 要到批量大的时候才有优势，批量 1024 时快约 14 倍。Karpathy 用的批量是 100<sup class="cite"><a href="#src1">[1, Paul Graham generator]</a></sup>。这些数只跑了一轮，GPU 上当时还驻留着别的任务（占显存但不占算力），当作量级看。</p>
+
+<div class="exercise">
+<h3>练习 C：把权重对上</h3>
+<p>补全那 6 行拷贝，让 <code>nn.RNN</code> 和手写版输出一致。<code>nn.RNN</code> 默认输入形状是 <code>(序列长, 批量, 输入维度)</code><sup class="cite"><a href="#src2">[2]</a></sup>。</p>
+<pre><code>import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+V, H = 24, 32
+torch.manual_seed(0)
+W_xh, W_hh = torch.randn(H, V) * 0.1, torch.randn(H, H) * 0.1
+W_hy, b_h, b_y = torch.randn(V, H) * 0.1, torch.randn(H) * 0.1, torch.randn(V) * 0.1
+
+rnn = nn.RNN(V, H)
+fc = nn.Linear(H, V)
+with torch.no_grad():
+    # 把 W_xh, W_hh, b_h, W_hy, b_y 拷进去，并处理多出来的那个偏置
+    ...
+
+seq = torch.randint(0, V, (50,))
+h, mine = torch.zeros(H), []
+for i in seq:
+    h = torch.tanh(W_xh[:, i] + W_hh @ h + b_h)
+    mine.append(W_hy @ h + b_y)
+mine = torch.stack(mine)
+
+out, _ = rnn(F.one_hot(seq, V).float().unsqueeze(1))
+theirs = fc(out).squeeze(1)
+assert (mine - theirs).abs().max() &lt; 1e-5, "两边输出应该一致"
+print("全部通过，最大差别", (mine - theirs).abs().max().item())</code></pre>
+<details><summary>写完再看参考解答</summary>
+<pre><code>    rnn.weight_ih_l0.copy_(W_xh)
+    rnn.weight_hh_l0.copy_(W_hh)
+    rnn.bias_ih_l0.copy_(b_h)
+    rnn.bias_hh_l0.zero_()
+    fc.weight.copy_(W_hy)
+    fc.bias.copy_(b_y)</code></pre>
+<p>这份解答我跑过，断言全部通过。</p>
+</details>
+</div>
+
+<h2>4　总复习</h2>
+<p>五个问题各来自一课，不看前面的内容回答。</p>
+
+<div class="quiz" data-answer="2">
+<p class="q">第 1 课：为什么 <code>step(x_t)</code> 的输出能依赖更早的字符？</p>
+<ol><li>输入里拼接了历史</li><li>权重每一步都不同</li><li>旧状态经由 W_hh 传入</li><li>输出层记录了历史</li></ol>
+<p class="explain">x_t 只是当前字符，历史全部压缩在 h_{t−1} 里，通过 W_hh 进入这一步。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">第 2 课：notebook 损失曲线的高起点来自什么？</p>
+<ol><li>总和初值配平均损失</li><li>学习率设得实在太大</li><li>梯度裁剪的阈值太小</li><li>模型一开始就有饱和</li></ol>
+<p class="explain">初值 ln V × 25 是总和尺度，CrossEntropyLoss 默认却取平均。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">第 3 课：下面哪个是 <code>h.detach()</code> 的效果？</p>
+<ol><li>状态归零梯度回传</li><li>状态归零梯度断开</li><li>状态传递梯度回传</li><li>状态传递梯度断开</li></ol>
+<p class="explain">数值照常传给下一块，计算图在这里断开。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">第 4 课：T → 0 时，采样退化成什么？</p>
+<ol><li>均匀随机抽字符</li><li>每步取最大概率</li><li>每步取最小概率</li><li>重复上一个字符</li></ol>
+<p class="explain">概率比的指数 1/T 趋于无穷，最高分字符的概率趋于 1。</p>
+</div>
+
+<div class="quiz" data-answer="2">
+<p class="q">本课：<code>nn.RNN</code> 和手写版权重对齐后，输出关系如何？</p>
+<ol><li>只有形状一样</li><li>相差一个系数</li><li>只差浮点误差</li><li>方向恰好相反</li></ol>
+<p class="explain">实测最大差别约 10⁻⁶，它们是同一个模型。</p>
+</div>
+
+<h2>结业作业</h2>
+<div class="exercise">
+<h3>修好这本 notebook，再讲给别人听</h3>
+<ol>
+<li>每次只改一处，重新跑训练：先改 <code>smooth_loss</code> 的初值；再把 <code>learning_rate</code> 改成 0.003；最后另外记录每步的真实损失并画出来。</li>
+<li>留出最后 20% 的<strong>不同</strong>文本当验证集，比较训练损失和验证损失。这份数据是重复 20 遍的，直接切分没有意义，你要先想办法解决这一点。这一步我没有替你跑过。</li>
+<li>写一段不超过 300 字的讲解：RNN 靠什么记住上下文，它能记多远，为什么 notebook 那条曲线不能信。</li>
+</ol>
+<p>写完发给我，我按第 1 到 5 课的内容逐条反馈。</p>
+</div>
+
+<h2>接下来</h2>
+<p><strong>去读原文：</strong><a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">Karpathy 原文</a>的 "Understanding what's going on" 整节，看看可解释单元在大数据上长什么样。下一篇论文是 LSTM，它要解决的正是第 3 课的连乘。</p>
+<p class="ask box plain">有不清楚的地方，直接在终端问我。做完后把练习结果和结业作业发给我。</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">A. Karpathy, <a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">"The Unreasonable Effectiveness of Recurrent Neural Networks"</a>, 2015。引用标的是文中的小节名。</li>
+<li id="src2">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.RNN.html">nn.RNN</a>、<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Embedding.html">nn.Embedding</a>。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0004-temperature.html">← 第 4 课：采样与温度</a> · <a href="../reference/rnn-cheatsheet.html">速查</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="../index.html">回到课程首页</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../../assets/num.js"></script>
+</body>
+</html>

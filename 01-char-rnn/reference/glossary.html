@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RNN 术语表</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+<p class="kicker">参考 · 术语表</p>
+<h1>术语表</h1>
+<p class="subtitle">课程统一译法。notebook 用繁体写法的，放在括号里。</p>
+<table>
+<tr><th class="l">术语</th><th class="l">英文</th><th class="l">含义</th></tr>
+<tr><td class="l">隐藏状态（隱藏狀態）</td><td class="l">hidden state</td><td class="l">固定大小的向量 h，是模型对已读内容的摘要。</td></tr>
+<tr><td class="l">时间步</td><td class="l">time step</td><td class="l">读入一个字符、更新一次状态，算一步。</td></tr>
+<tr><td class="l">one-hot</td><td class="l">1-of-k encoding</td><td class="l">只有字符对应的位置为 1，其余为 0 的向量。</td></tr>
+<tr><td class="l">logits（分数）</td><td class="l">logits</td><td class="l">softmax 之前的 y，每个字符一个，可正可负。</td></tr>
+<tr><td class="l">softmax</td><td class="l">softmax</td><td class="l">把分数变成和为 1 的概率。</td></tr>
+<tr><td class="l">交叉熵</td><td class="l">cross-entropy</td><td class="l">本课的单步损失：−ln p(正确字符)。</td></tr>
+<tr><td class="l">指数滑动平均（EMA）</td><td class="l">exponential moving average</td><td class="l">s = βs + (1−β)l。本课程用它平滑损失。</td></tr>
+<tr><td class="l">反向传播穿越时间</td><td class="l">BPTT</td><td class="l">把循环按时间展开后做反向传播。</td></tr>
+<tr><td class="l">截断 BPTT</td><td class="l">truncated BPTT</td><td class="l">梯度只回传固定长度的窗口，状态继续往前传。</td></tr>
+<tr><td class="l">梯度裁剪</td><td class="l">gradient clipping</td><td class="l">梯度范数超过阈值时等比例缩小。</td></tr>
+<tr><td class="l">饱和</td><td class="l">saturation</td><td class="l">tanh 的输出贴近 ±1，导数接近 0。</td></tr>
+<tr><td class="l">温度</td><td class="l">temperature</td><td class="l">采样前除以分数的 T，控制分布的集中程度。</td></tr>
+<tr><td class="l">权重共享</td><td class="l">weight sharing</td><td class="l">每个时间步都用同一组 W 和 b。</td></tr>
+</table>
+<p class="muted"><a href="rnn-cheatsheet.html">RNN 速查</a> · <a href="../index.html">课程首页</a></p>
+</main>
+</body>
+</html>

@@ -58,6 +58,8 @@ pre code { background: none; padding: 0; }
 
 /* 表格 */
 table { border-collapse: collapse; margin: 1rem 0; font-family: var(--sans); font-size: .9rem; }
+main table { display: block; max-width: 100%; overflow-x: auto; }
+.rnn-demo table { display: table; max-width: none; overflow: visible; }
 th, td { border-bottom: 1px solid var(--rule); padding: .35rem .7rem; text-align: center; }
 th { font-weight: 600; }
 td.l, th.l { text-align: left; }

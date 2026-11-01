@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RNN 的不合理有效性</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">课程包 · 第 1 篇</p>
+<h1>RNN 的不合理有效性</h1>
+<p class="subtitle">一个只会预测下一个字符的网络，靠什么记住上下文，又能记多远。这一包用五课从 "hello" 讲到截断 BPTT，顺手修好 notebook 里几处站不住的结论。</p>
+
+<p>Karpathy 在 2015 年写了一篇很有名的文章：简单的字符级 RNN 能生成像样的文本、代码和 LaTeX。胡嘉玺 notebook 第 2 章把它做成了可以跑的 PyTorch 代码。这一包顺着那份 notebook 讲，每个数字都实际跑过，也因此查出了它的问题：那条漂亮的损失曲线大部分是假象，真实损失中途回弹过。</p>
+
+<div class="box">
+<p>假定你会 Python，学过一点矩阵乘法和求导，PyTorch API 第一次出现时会讲。按编号往下读，做完该课的练习再进下一课。</p>
+</div>
+
+<h2>五课一条线</h2>
+
+<p>先弄清记忆从哪来，再学会判断训练是否真的有效，然后看记忆的边界，最后看怎么用它、怎么解释它。</p>
+
+<ol class="syllabus">
+<li>
+<a href="lessons/0001-same-l-two-answers.html">同一个 l，两个答案</a>
+<span class="what">更新公式和形状，证明没有 <code>W_hh</code> 时损失最低只到 (ln 2)/2。</span>
+</li>
+<li>
+<a href="lessons/0002-loss-curve.html">那条漂亮的损失曲线是假的</a>
+<span class="what">ln V、指数平滑和初值错配，以及被它盖住的回弹。</span>
+</li>
+<li>
+<a href="lessons/0003-truncated-bptt.html">截断 BPTT：一行 detach 决定它能记多远</a>
+<span class="what">状态往前传，梯度只回传一个窗口。推导衰减，再用实验看边界。</span>
+</li>
+<li>
+<a href="lessons/0004-temperature.html">采样与温度：一个除号做了什么</a>
+<span class="what">证明熵随温度单调不减，并分清写作和背诵。</span>
+</li>
+<li>
+<a href="lessons/0005-inside-hidden-state.html">拆开隐藏状态，核对 notebook 的结论</a>
+<span class="what">量化写死的 <code>print</code>，对齐 <code>nn.RNN</code>，看 GPU 何时才有用。含结业作业。</span>
+</li>
+</ol>
+
+<h2>学完能检验的五件事</h2>
+
+<table>
+<tr><th class="l">你能做到</th><th class="l">在哪一课验收</th></tr>
+<tr><td class="l">写出更新公式和每个矩阵的形状，证明没有 <code>W_hh</code> 学不会 "hello"</td><td class="l"><a href="lessons/0001-same-l-two-answers.html">第 1 课</a>，不看笔记写出 <code>step</code></td></tr>
+<tr><td class="l">算出未训练模型的损失，拆开一条可疑的训练曲线</td><td class="l"><a href="lessons/0002-loss-curve.html">第 2 课</a></td></tr>
+<tr><td class="l">手写带 <code>detach</code> 的训练循环，说清它切断了什么，并推导梯度衰减</td><td class="l"><a href="lessons/0003-truncated-bptt.html">第 3 课</a>练习 C</td></tr>
+<tr><td class="l">从 softmax 推出温度的效果，证明熵单调不减</td><td class="l"><a href="lessons/0004-temperature.html">第 4 课</a></td></tr>
+<tr><td class="l">修好 notebook，并写成能教给别人的一段话</td><td class="l"><a href="lessons/0005-inside-hidden-state.html">第 5 课</a>结业作业</td></tr>
+</table>
+
+<h2>本包附页</h2>
+
+<ul>
+<li><a href="reference/glossary.html">术语表</a></li>
+<li><a href="reference/rnn-cheatsheet.html">速查：Vanilla RNN</a></li>
+</ul>
+
+<h2>材料</h2>
+
+<p>课文是这一包里要读的正文。配套代码是胡嘉玺 notebook 的 <span class="mono">ch02/char_rnn_pytorch.ipynb</span>，不随站点发布。原文和代码：</p>
+<ul>
+<li>Karpathy，<a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">The Unreasonable Effectiveness of Recurrent Neural Networks</a>，2015。</li>
+<li>Karpathy，<a href="https://gist.github.com/karpathy/d4dee566867f8291f086">min-char-rnn</a>，约 100 行 NumPy 实现。</li>
+</ul>
+
+<nav class="pager">
+<span class="muted">5 课 · 按顺序</span>
+<a href="lessons/0001-same-l-two-answers.html">从第 1 课开始 →</a>
+</nav>
+
+</main>
+</body>
+</html>

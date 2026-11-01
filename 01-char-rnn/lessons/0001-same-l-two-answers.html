@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同一个 l，两个答案</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 1 课 · RNN 的不合理有效性</p>
+<h1>同一个 l，两个答案</h1>
+<p class="subtitle">从 "hello" 这个最小的例子，证明 RNN 为什么离不开 W_hh</p>
+
+<p>训练串是 "hello"。模型每次看一个字符，要猜下一个。读到第一个 l，正确答案是 l；读到第二个 l，正确答案是 o。两次输入完全相同，答案却不同。Karpathy 说，RNN 因此不能只靠输入，必须用循环连接记住上下文<sup class="cite"><a href="#src1">[1, Character-Level Language Models]</a></sup>。</p>
+
+<p>这节课把这句话变成一个可以计算的结论。</p>
+
+<p class="win"><strong>本课收获：</strong>你能写出更新公式和每个矩阵的形状，能证明没有 W_hh 时 "hello" 的平均损失最低只能到 0.3466，并能用 PyTorch 写出一步 RNN。</p>
+
+<h2>1　公式和形状</h2>
+
+<p>Notebook 第 2.1 节写的是<sup class="cite"><a href="#src2">[2]</a></sup>：</p>
+
+<div class="box plain">
+<p style="margin:0; text-align:center" class="mono">h_t = tanh(W_xh x_t + W_hh h_{t−1} + b_h)</p>
+<p style="margin:.4rem 0 0; text-align:center" class="mono">y_t = W_hy h_t + b_y</p>
+</div>
+
+<ul>
+<li><span class="mono">W_xh x_t</span> 把<strong>当前字符</strong>写进状态。</li>
+<li><span class="mono">W_hh h_{t−1}</span> 把<strong>旧状态</strong>带到这一步。</li>
+<li><span class="mono">tanh</span> 把相加的结果逐元素压到 (−1, 1)<sup class="cite"><a href="#src1">[1, RNN computation]</a></sup>。</li>
+<li><span class="mono">y_t</span> 是每个字符的分数，经过 softmax 变成概率。</li>
+</ul>
+
+<p>Karpathy 的版本没有两个偏置 <span class="mono">b</span>，其余相同<sup class="cite"><a href="#src1">[1, RNN computation]</a></sup>。形状可以从矩阵乘法倒推：结果要是 H 维，输入是 V 维，矩阵就得是 H×V。</p>
+
+<div class="exercise">
+<h3>练习 A：形状</h3>
+<p>词表 V = 4（h、e、l、o），隐藏维度 H = 3。写成 <code>3x4</code> 这样的格式。</p>
+<p><span class="mono">W_xh</span> 的形状：</p>
+<div class="num" data-text="3x4" data-placeholder="行x列" data-hint="它接收 4 维的 x，输出 3 维。矩阵是 输出维度 × 输入维度。" data-explain="H×V = 3×4。"></div>
+<p><span class="mono">W_hh</span> 的形状：</p>
+<div class="num" data-text="3x3" data-placeholder="行x列" data-hint="它接收 h，输出也要加到 h 上。" data-explain="H×H = 3×3。"></div>
+<p><span class="mono">W_hy</span> 的形状：</p>
+<div class="num" data-text="4x3" data-placeholder="行x列" data-hint="它接收 3 维的 h，输出每个字符一个分数。" data-explain="V×H = 4×3。"></div>
+<p>再算 notebook 的设置：V = 24，H = 128，加上 <span class="mono">b_h</span>（H 个）和 <span class="mono">b_y</span>（V 个），一共多少参数？</p>
+<div class="num" data-answer="22680" data-tol="0" data-placeholder="参数总数" data-hint="把三个矩阵的元素数和两个偏置加起来：128×24 + 128×128 + 24×128 + 128 + 24。" data-explain="3072 + 16384 + 3072 + 128 + 24 = 22680。W_hh 占了七成多。"></div>
+</div>
+
+<p>乘以 one-hot 有个简便算法：<span class="mono">x_t</span> 只有一个位置是 1，所以 <span class="mono">W_xh x_t</span> 就是取出 <span class="mono">W_xh</span> 的<strong>那一列</strong>。</p>
+
+<div class="exercise">
+<h3>练习 B：手算一步</h3>
+<p>V = 2，H = 2，偏置为 0，当前字符是第 2 个（<span class="mono">x = [0, 1]ᵀ</span>）：</p>
+<pre><code>W_xh = [[1,  2],     W_hh = [[1, 0],     h_prev = [ 0.5,
+        [0, -1]]             [1, 1]]               -0.5]</code></pre>
+<p>求 tanh 里面的向量 <span class="mono">z = W_xh x + W_hh h_prev</span>。第 1 个元素：</p>
+<div class="num" data-answer="2.5" data-placeholder="z₁" data-hint="W_xh x 取第 2 列 [2, −1]；W_hh h_prev 的第 1 行是 1×0.5 + 0×(−0.5)。" data-explain="2 + 0.5 = 2.5。"></div>
+<p>第 2 个元素：</p>
+<div class="num" data-answer="-1" data-placeholder="z₂" data-hint="W_hh h_prev 的第 2 行是 1×0.5 + 1×(−0.5) = 0。" data-explain="−1 + 0 = −1。"></div>
+</div>
+
+<h2>2　看它读 "hell"</h2>
+
+<p>下面是一个真实训练过的小网络：V = 4，H = 3，只在 "hello" 上训练了 400 步。每次点击读入一个字符，读到第一个 l 时先停一下，猜猜第二个 l 的结果。</p>
+
+<div class="rnn-demo"></div>
+
+<p>然后勾选「切断记忆」，再看第 2、3 行。这个开关只把 <span class="mono">W_hh</span> 换成零矩阵，其他权重不变。</p>
+
+<h2>3　推导：没有 W_hh 最好能做到多少</h2>
+
+<p>上面的演示还不算证明：切断后的权重是带着记忆训练出来的，重新训练也许能补救。下面证明不能。</p>
+
+<div class="proof">
+<p><strong>第一步，状态退化。</strong>令 <span class="mono">W_hh = 0</span>，公式变成 <span class="mono">h_t = tanh(W_xh x_t + b_h)</span>。h_t 只取决于 x_t，所以两个 l 得到同一个 h，也就得到同一个概率分布。无论权重怎么取，都是如此。</p>
+<p><strong>第二步，写出损失。</strong>单步损失是交叉熵 <span class="mono">−ln p(正确字符)</span><sup class="cite"><a href="#src3">[3]</a></sup>。设读到 l 时预测 l 的概率是 a，预测 o 的概率是 b，<span class="mono">a + b ≤ 1</span>。两个 l 这两步的损失之和是</p>
+<p style="text-align:center"><span class="mono">L(a, b) = −ln a − ln b</span></p>
+<p><strong>第三步，求最小值。</strong>L 随 a、b 增大而减小，所以最优时 <span class="mono">a + b = 1</span>。令 <span class="mono">b = 1 − a</span>，求导：</p>
+<p style="text-align:center"><span class="mono">dL/da = −1/a + 1/(1 − a) = 0　⇒　a = 1/2</span></p>
+<p>二阶导 <span class="mono">1/a² + 1/(1 − a)²</span> 恒为正，这确实是最小值，为 <span class="mono">2 ln 2</span>。<span class="qed">∎</span></p>
+</div>
+
+<p>h→e 和 e→l 这两步，输入各不相同，损失可以逼近 0。所以这 4 步的平均损失有一个下界。</p>
+
+<div class="exercise">
+<h3>练习 C：下界是多少</h3>
+<p>用 <span class="mono">ln 2 ≈ 0.693</span>，算没有 <span class="mono">W_hh</span> 时 "hello" 4 步的最低平均损失。</p>
+<div class="num" data-answer="0.3466" data-tol="0.002" data-placeholder="最低平均损失" data-hint="4 步里两步是 0，另外两步合计 2 ln 2，再除以 4。" data-explain="2 ln 2 / 4 = (ln 2)/2 ≈ 0.3466。"></div>
+</div>
+
+<p>我用 torch 把两种情况都训练了 400 步（同样的初始化方式和优化器，Adam，学习率 0.05），实测结果和推导相符：</p>
+
+<table>
+<tr><th class="l">模型</th><th>最终平均损失</th><th class="l">两个 l 上的预测</th></tr>
+<tr><td class="l">有 W_hh</td><td>0.0005</td><td class="l">第一个 l 预测 l，第二个 l 预测 o，都接近 1</td></tr>
+<tr><td class="l">W_hh 固定为 0</td><td>0.3473（下界 0.3466）</td><td class="l">两个 l 都是 l 0.5、o 0.5</td></tr>
+</table>
+
+<p>记忆也能追溯到更早的字符。把公式展开两层（省略偏置）就能看到：</p>
+<p style="text-align:center"><span class="mono">h₂ = tanh(W_xh x₂ + W_hh · tanh(W_xh x₁ + W_hh h₀))</span></p>
+<p>每多一步就多包一层，所以 h_t 依赖所有更早的输入，而且只通过 W_hh 这条路依赖。</p>
+
+<h2>4　写成 PyTorch</h2>
+
+<p>对照 notebook 的 <code>VanillaRNN.forward</code>，本课只需要这几个 API：</p>
+<ul>
+<li><code>torch.mm(A, B)</code>：矩阵乘法，两个参数都必须是 2 维张量<sup class="cite"><a href="#src4">[4]</a></sup>。所以 notebook 把向量写成 <code>(H, 1)</code> 的列向量，而不是 <code>(H,)</code>。</li>
+<li><code>x[idx] = 1.0</code>：<code>x</code> 的形状是 <code>(V, 1)</code>，这行把第 idx 行设为 1，也就是 one-hot。</li>
+<li><code>torch.tanh(t)</code>：逐元素计算，形状不变<sup class="cite"><a href="#src5">[5]</a></sup>。</li>
+<li><code>nn.Parameter(t)</code>：把张量注册成模型参数，优化器才能更新它<sup class="cite"><a href="#src6">[6]</a></sup>。下面的练习不训练，所以用普通张量。</li>
+</ul>
+
+<div class="exercise">
+<h3>练习 D：写出 step</h3>
+<p>把下面存成 <code>l1.py</code>，补全 <code>step</code>，先不要看 notebook。然后运行：</p>
+<pre><code>uv run --no-project --python 3.12 --with torch python l1.py</code></pre>
+<p>第一次运行要下载 torch。出现「全部通过」就算完成。</p>
+<pre><code>import torch
+
+V, H = 4, 3
+torch.manual_seed(0)
+W_xh = torch.randn(H, V)
+W_hh = torch.randn(H, H)
+W_hy = torch.randn(V, H)
+b_h = torch.zeros(H, 1)
+b_y = torch.zeros(V, 1)
+
+
+def step(idx, h, W_hh=W_hh):
+    # 返回 (新的 h, y)。h 的形状是 (H, 1)，y 的形状是 (V, 1)
+    ...
+
+
+def read(word, W_hh=W_hh):
+    h = torch.zeros(H, 1)
+    hs = []
+    for ch in word:
+        h, y = step("helo".index(ch), h, W_hh)
+        hs.append(h)
+    return hs, y
+
+
+hs, y = read("hell")
+assert hs[0].shape == (3, 1) and y.shape == (4, 1)
+assert not torch.equal(hs[2], hs[3]), "两个 l 的隐藏状态应该不同"
+hs0, _ = read("hell", torch.zeros(H, H))
+assert torch.equal(hs0[2], hs0[3]), "W_hh 为 0 时两个 l 应该完全相同"
+assert torch.allclose(hs[1], torch.tanh(W_xh[:, [1]] + W_hh @ hs[0]))
+print("全部通过")
+print("第一个 l:", hs[2].squeeze().tolist())
+print("第二个 l:", hs[3].squeeze().tolist())</code></pre>
+<details><summary>写完再看参考解答</summary>
+<pre><code>def step(idx, h, W_hh=W_hh):
+    x = torch.zeros(V, 1)
+    x[idx] = 1.0
+    h = torch.tanh(torch.mm(W_xh, x) + torch.mm(W_hh, h) + b_h)
+    y = torch.mm(W_hy, h) + b_y
+    return h, y</code></pre>
+<p>这份解答我跑过，断言全部通过。</p>
+</details>
+</div>
+
+<h2>5　不看上文，回答</h2>
+
+<div class="quiz" data-answer="3">
+<p class="q">W_hh 为 0 时，第二个 l 的 h 和第一个 l 的 h 相比如何？</p>
+<ol><li>符号整体相反</li><li>全部变成零值</li><li>大小略有差异</li><li>两者完全相同</li></ol>
+<p class="explain">h_t = tanh(W_xh x_t + b_h) 只取决于当前字符，权重取什么值都一样。</p>
+</div>
+
+<div class="quiz" data-answer="1">
+<p class="q">W_xh 乘以一个 one-hot 向量，得到的是什么？</p>
+<ol><li>某一行向量</li><li>某一列向量</li><li>对角线向量</li><li>各行平均值</li></ol>
+<p class="explain">one-hot 只有第 idx 个位置是 1，矩阵乘法就只留下第 idx 列。W_xh 是 H×V，所以结果是 H 维。</p>
+</div>
+
+<div class="quiz" data-answer="2">
+<p class="q">读 5 个字符和读 5000 个字符，RNN 的参数量有什么区别？</p>
+<ol><li>与序列长度成正比</li><li>与序列长度成反比</li><li>与序列长度无关系</li><li>与长度平方成正比</li></ol>
+<p class="explain">每一步共用同一组 W 和 b，序列长度只决定循环次数。</p>
+</div>
+
+<h2>接下来</h2>
+
+<p><strong>去读原文：</strong><a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">原文</a>的 "RNN computation" 一节，再读 "Character-Level Language Models" 到 "Notice also that the first time" 这一段。Karpathy 自己也写了 <a href="https://gist.github.com/karpathy/d4dee566867f8291f086">min-char-rnn</a>，约 100 行<sup class="cite"><a href="#src1">[1, Character-Level Language Models]</a></sup>，第 3 课之前不用细读。</p>
+
+<p><strong>下一课的问题：</strong>notebook 的损失曲线从约 80 平滑地降到约 5。可是 V = 24 时，什么都没学的模型平均损失也才约 ln 24 ≈ 3.18。这个 80 是哪来的？我完整跑了一遍训练，发现真实损失中途还回弹过，这条曲线完全看不出来。下一课我们一起拆它。</p>
+
+<p class="ask box plain">有不清楚的地方，直接在终端问我。做完后告诉我练习 A、C 的结果和练习 D 有没有通过；再用自己的话回答一句：为什么 <code>step(x_t)</code> 的输出能依赖更早的字符？</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">A. Karpathy, <a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">"The Unreasonable Effectiveness of Recurrent Neural Networks"</a>, 2015。引用标的是文中的小节名。</li>
+<li id="src2">joshhuilya30，<span class="mono">ch02/char_rnn_pytorch.ipynb</span>，第 2 节。</li>
+<li id="src3">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html">nn.CrossEntropyLoss</a>。</li>
+<li id="src4">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.mm.html">torch.mm</a>。</li>
+<li id="src5">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.tanh.html">torch.tanh</a>。</li>
+<li id="src6">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html">nn.Parameter</a>。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="../reference/rnn-cheatsheet.html">RNN 速查</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0002-loss-curve.html">下一课：损失与那条假曲线 →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../../assets/num.js"></script>
+<script src="../assets/rnn-demo.js"></script>
+</body>
+</html>

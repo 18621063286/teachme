@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RNN 速查</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+<p class="kicker">参考 · 速查</p>
+<h1>Vanilla RNN</h1>
+<p class="subtitle">公式、形状、训练和采样。来自全部五课。<a href="../index.html">课程首页</a></p>
+
+<h2>一步</h2>
+<div class="box plain">
+<p style="margin:0; text-align:center" class="mono">h_t = tanh(W_xh x_t + W_hh h_{t−1} + b_h)</p>
+<p style="margin:.4rem 0 0; text-align:center" class="mono">y_t = W_hy h_t + b_y　　p_t = softmax(y_t)</p>
+</div>
+<pre><code>x = torch.zeros(V, 1); x[idx] = 1.0
+h = torch.tanh(torch.mm(W_xh, x) + torch.mm(W_hh, h) + b_h)
+y = torch.mm(W_hy, h) + b_y</code></pre>
+
+<h2>形状（V = 词表，H = 隐藏维度）</h2>
+<table>
+<tr><th class="l">量</th><th>形状</th><th class="l">作用</th><th>V=24, H=128 的元素数</th></tr>
+<tr><td class="l mono">x_t</td><td class="mono">V×1</td><td class="l">当前字符的 one-hot</td><td>—</td></tr>
+<tr><td class="l mono">h_t</td><td class="mono">H×1</td><td class="l">到目前为止的摘要</td><td>—</td></tr>
+<tr><td class="l mono">W_xh</td><td class="mono">H×V</td><td class="l">写入当前字符</td><td>3072</td></tr>
+<tr><td class="l mono">W_hh</td><td class="mono">H×H</td><td class="l">带入旧状态</td><td>16384</td></tr>
+<tr><td class="l mono">W_hy</td><td class="mono">V×H</td><td class="l">状态变成分数</td><td>3072</td></tr>
+<tr><td class="l mono">b_h / b_y</td><td class="mono">H×1 / V×1</td><td class="l">偏置</td><td>128 / 24</td></tr>
+<tr><th class="l">合计</th><td></td><td></td><th>22680</th></tr>
+</table>
+
+<h2>要记住的三件事</h2>
+<ul>
+<li>矩阵乘 one-hot 等于取一列：<span class="mono">W_xh x = W_xh[:, idx]</span>。</li>
+<li>所有时间步共用同一套权重，所以参数量与序列长度无关。</li>
+<li>W_hh = 0 时 h_t 只取决于 x_t。"hello" 上最低平均损失是 ln2 / 2 ≈ 0.3466。</li>
+</ul>
+<h2>训练时先核对</h2>
+<ul>
+<li>起点：平均交叉熵应约等于 <span class="mono">ln V</span>。V = 24 时是 3.18。</li>
+<li>平滑：两个初值的差是 <span class="mono">βⁿ(s₀ − s₀′)</span>，和模型无关。β = 0.999 时半衰期约 693 步。总和和平均不要混用。</li>
+<li>同时画真实损失，平滑会盖住回弹。</li>
+</ul>
+
+<h2>截断 BPTT</h2>
+<pre><code>h = h.detach()                   # 数值照传，计算图断开
+out, _, h = model(inputs, h)</code></pre>
+<p class="mono" style="text-align:center">∂h_t/∂h_{t−1} = D_t W_hh，D_t = diag(1 − h_t²)，‖∂h_t/∂h_{t−k}‖ ≤ ‖W_hh‖ᵏ</p>
+<p>窗口长于依赖距离才可能学会，而且窗口够长也不保证。裁剪：<span class="mono">‖g‖ &gt; c</span> 时 <span class="mono">g ← g·c/‖g‖</span>。</p>
+
+<h2>温度</h2>
+<p class="mono" style="text-align:center">p_i(T) ∝ exp(y_i/T)，p_i/p_j = [p_i(1)/p_j(1)]^(1/T)，dH/dT = Var(y)/T³ ≥ 0</p>
+<pre><code>idx = torch.multinomial(F.softmax(y / T, dim=0), 1).item()</code></pre>
+
+<h2>nn.RNN 对应关系</h2>
+<table>
+<tr><th class="l">手写</th><th class="l">nn.RNN</th></tr>
+<tr><td class="l mono">W_xh / W_hh</td><td class="l mono">weight_ih_l0 / weight_hh_l0</td></tr>
+<tr><td class="l mono">b_h</td><td class="l mono">bias_ih_l0 + bias_hh_l0</td></tr>
+<tr><td class="l mono">W_hy, b_y</td><td class="l">另加 nn.Linear</td></tr>
+</table>
+<p>默认输入形状 <code>(序列长, 批量, 输入维度)</code>，<code>batch_first=True</code> 时批量在前。</p>
+</main>
+</body>
+</html>

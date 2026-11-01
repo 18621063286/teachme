@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>采样与温度</title>
+<link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 4 课 · RNN 的不合理有效性</p>
+<h1>采样与温度：一个除号做了什么</h1>
+<p class="subtitle">推导 softmax(y/T)，再看模型到底是在写作还是在背书</p>
+
+<p>训练好以后，生成文本只有一个循环：算出下一个字符的概率，抽一个，把它喂回去<sup class="cite"><a href="#src1">[1, Character-Level Language Models]</a></sup>。Notebook 的 <code>sample</code> 里，温度只出现在一处：</p>
+
+<pre><code>probs = F.softmax(y.squeeze() / temperature, dim=0)
+idx = torch.multinomial(probs, 1).item()</code></pre>
+
+<p class="win"><strong>本课收获：</strong>你能证明温度升高时分布的熵一定不减，说清 T → 0 和 T → ∞ 的极限，并能判断一段「写得很好」的输出是不是只是背诵。这也回答了 notebook 的思考题 5。</p>
+
+<h2>1　推导</h2>
+
+<p>分数 y 除以 T 再做 softmax：</p>
+<div class="box plain"><p style="text-align:center; margin:0" class="mono">p_i(T) = exp(y_i / T) / Σ_j exp(y_j / T)</p></div>
+
+<p>分母在两两相比时会约掉，于是任意两个字符的概率比是：</p>
+<div class="box plain"><p style="text-align:center; margin:0" class="mono">p_i(T) / p_j(T) = exp((y_i − y_j) / T) = [ p_i(1) / p_j(1) ]^(1/T)</p></div>
+
+<p>这条式子就够看出两个极限。设 y_i &gt; y_j：</p>
+<ul>
+<li><strong>T → 0</strong>：指数趋于 +∞，比值发散，最高分的字符概率趋于 1（并列时平分）。采样退化成每次取最大值。</li>
+<li><strong>T → ∞</strong>：指数趋于 0，所有比值趋于 1，分布趋于均匀，模型学到的东西全部作废。</li>
+</ul>
+
+<p>Karpathy 说降温让模型「更自信也更保守」，升温「更多样但错误更多」<sup class="cite"><a href="#src1">[1, Temperature]</a></sup>。「多样」可以用熵来量，下面证明它随 T 单调不减。</p>
+
+<div class="proof">
+<p><strong>设定。</strong>令 <span class="mono">β = 1/T</span>，<span class="mono">Z = Σ exp(βy_j)</span>，于是 <span class="mono">ln p_i = βy_i − ln Z</span>。记 <span class="mono">ȳ = Σ p_i y_i</span>。</p>
+<p><strong>求 dp/dβ。</strong>先有 <span class="mono">d(ln Z)/dβ = ȳ</span>，所以 <span class="mono">dp_i/dβ = p_i (y_i − ȳ)</span>。</p>
+<p><strong>求 dH/dβ。</strong>对 <span class="mono">H = −Σ p_i ln p_i</span> 求导，并利用 <span class="mono">Σ dp_i/dβ = 0</span>：</p>
+<p style="text-align:center"><span class="mono">dH/dβ = −Σ (dp_i/dβ) ln p_i = −Σ p_i (y_i − ȳ)(βy_i − ln Z)</span></p>
+<p>常数项 <span class="mono">ln Z</span> 乘以 <span class="mono">Σ p_i (y_i − ȳ) = 0</span> 后消失，剩下 <span class="mono">dH/dβ = −β Var(y)</span>，其中 Var 按 p 加权。</p>
+<p><strong>换回 T。</strong><span class="mono">dβ/dT = −1/T²</span>，所以</p>
+<p style="text-align:center"><span class="mono">dH/dT = Var(y) / T³ ≥ 0</span></p>
+<p>只有所有分数都相等时才取等号。<span class="qed">∎</span></p>
+</div>
+
+<p>拖动下面的滑块。分数用的是 Karpathy 图里第一步的四个数：h 1.0、e 2.2、l −3.0、o 4.1<sup class="cite"><a href="#src1">[1, Character-Level Language Models]</a></sup>。</p>
+
+<div class="temp-widget" data-labels="h,e,l,o" data-logits="1,2.2,-3,4.1"></div>
+
+<div class="exercise">
+<h3>练习 A：先手算，再用滑块核对</h3>
+<p>上面的分数里，o 比 e 高 1.9 分。已知 <span class="mono">e^1.9 ≈ 6.69</span>，T = 1 时 <span class="mono">p(o)/p(e)</span> 约为 6.69。T = 0.5 时这个比值是多少？</p>
+<div class="num" data-answer="44.7" data-tol="0.6" data-placeholder="p(o)/p(e)" data-hint="指数是 1/T = 2，所以把比值平方。" data-explain="6.69² ≈ 44.7。实际概率 0.976 / 0.022 也约等于这个数（后者四舍五入过）。"></div>
+<p>T = 2 时呢？</p>
+<div class="num" data-answer="2.59" data-tol="0.03" data-placeholder="p(o)/p(e)" data-hint="指数是 1/2，所以开平方。" data-explain="√6.69 ≈ 2.59，对应概率 0.614 / 0.238。"></div>
+</div>
+
+<h2>2　实测：同一个模型，不同温度</h2>
+
+<p>我训练了两个模型，每个温度从字符 d 开始各生成 5 段、每段 2000 字符，统计切出的单词有多少出现在训练文本里。下面第一个模型用 notebook 原来的 lr = 0.01，第二个用第 2 课查出来的 lr = 0.003。</p>
+
+<table>
+<tr><th>T</th><th>lr=0.01：词有效率</th><th>lr=0.01：熵（bit）</th><th>lr=0.003：词有效率</th><th>lr=0.003：熵（bit）</th></tr>
+<tr><td>0.5</td><td>64.0%</td><td>0.501</td><td>99.6%</td><td>0.005</td></tr>
+<tr><td>0.8</td><td>32.8%</td><td>0.850</td><td>99.4%</td><td>0.011</td></tr>
+<tr><td>1.0</td><td>19.3%</td><td>1.116</td><td>98.0%</td><td>0.028</td></tr>
+<tr><td>1.5</td><td>10.6%</td><td>1.815</td><td>79.2%</td><td>0.200</td></tr>
+<tr><td>2.0</td><td>4.0%</td><td>2.448</td><td>31.9%</td><td>0.622</td></tr>
+<tr><td>5.0</td><td>0.0%</td><td>4.056</td><td>0.5%</td><td>3.463</td></tr>
+</table>
+<p class="muted" style="font-size:.88rem">熵是沿 438 字符训练文本逐步计算后取平均，24 个字符的上限是 log₂24 ≈ 4.585。词有效率只算词在不在词表里，不看语序。</p>
+
+<p>两列熵都随 T 上升，和证明相符。再看两个模型的输出。T 接近 0 时（我用 0.001），生成结果是：</p>
+
+<pre><code>lr=0.01 ：atal networks networks\nnetworks\nnetworks\nnetworks\nnetworks...
+lr=0.003：ata\ndrives learning\nlearning from examples\nexamples help networks\n...</code></pre>
+
+<p>第一行陷入了循环。Karpathy 在 Paul Graham 数据上观察到同样的现象，他的模型在低温下反复说同一句关于创业的话<sup class="cite"><a href="#src1">[1, Temperature]</a></sup>。第二行看上去好多了，但除了开头那个 ata，后面逐句一比都是训练文本。</p>
+
+<div class="box">
+<p><strong>别被第二行骗了。</strong>这份训练数据是 18 句话重复 20 遍，没有划分验证集。lr = 0.003 的模型最后损失约 0.006，意思是它几乎把这 438 个字符背了下来。所以这里的「词有效率 99.6%」说明不了泛化能力。Karpathy 用的数据从约 1MB 到 100MB<sup class="cite"><a href="#src1">[1]</a></sup>，这篇文章说的「不合理的有效性」是在那种规模上观察到的。Notebook 这个玩具数据展示不了这一点。</p>
+</div>
+
+<div class="exercise">
+<h3>练习 B：写出带温度的采样</h3>
+<p>补全 <code>next_char</code>，然后运行。<code>F.softmax(t, dim=0)</code> 把一维分数变成概率；<code>torch.multinomial(p, n)</code> 按概率抽 n 个下标，默认不放回，要抽多个相同下标时需传 <code>replacement=True</code><sup class="cite"><a href="#src2">[2]</a></sup>。</p>
+<pre><code>import torch
+import torch.nn.functional as F
+
+y = torch.tensor([1.0, 2.2, -3.0, 4.1])  # h e l o
+
+
+def next_char(y, T, n=1):
+    # 返回 n 个按 softmax(y / T) 抽出的下标（可重复）
+    ...
+
+
+torch.manual_seed(0)
+cold = next_char(y, 0.1, 20000)
+hot = next_char(y, 50.0, 20000)
+assert (cold == 3).float().mean() &gt; 0.99, "T 很低时应该几乎总抽 o"
+freq = torch.bincount(hot, minlength=4) / 20000
+assert (freq - 0.25).abs().max() &lt; 0.05, "T 很高时应该接近均匀"
+mid = torch.bincount(next_char(y, 1.0, 200000), minlength=4) / 200000
+assert (mid - F.softmax(y, 0)).abs().max() &lt; 0.01
+print("全部通过")
+print("T=1 频率:", [round(v, 3) for v in mid.tolist()])</code></pre>
+<details><summary>写完再看参考解答</summary>
+<pre><code>def next_char(y, T, n=1):
+    return torch.multinomial(F.softmax(y / T, dim=0), n, replacement=True)</code></pre>
+<p>这份解答我跑过，断言全部通过。</p>
+</details>
+</div>
+
+<h2>3　不看上文，回答</h2>
+
+<div class="quiz" data-answer="2">
+<p class="q">T 从 1 降到 0.5，两个字符的概率比会怎样变化？</p>
+<ol><li>比值保持不变</li><li>比值开平方根</li><li>比值变成平方</li><li>比值变成倒数</li></ol>
+<p class="explain">比值的指数是 1/T。T = 0.5 时指数是 2，所以平方。</p>
+</div>
+
+<div class="quiz" data-answer="0">
+<p class="q">温度在什么时候起作用？</p>
+<ol><li>只在采样时起作用</li><li>只在训练时起作用</li><li>训练采样都起作用</li><li>只在初始化起作用</li></ol>
+<p class="explain">notebook 只在 sample 里除以 temperature，训练用的损失没有它。所以换温度不用重新训练。</p>
+</div>
+
+<div class="quiz" data-answer="3">
+<p class="q">重复背诵也能生成完整句子。要判断模型是否真的学到规律，最该加什么？</p>
+<ol><li>更高的采样温度</li><li>更大的隐藏维度</li><li>更长的序列长度</li><li>独立的验证文本</li></ol>
+<p class="explain">只有在没见过的文本上损失也低，才说明不是死记。Notebook 没有验证集。</p>
+</div>
+
+<h2>接下来</h2>
+<p><strong>去读原文：</strong><a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">原文</a>的 "Temperature" 一段，然后顺着读后面的 Shakespeare 和 Linux 源码样本，注意它们的数据量和这里差多少。</p>
+<p class="ask box plain">有不清楚的地方，直接在终端问我。做完后告诉我练习 A、B 的结果，再回答一句：为什么 lr = 0.01 的模型在相同温度下熵要高得多？（提示：回想第 2 课的回弹。）</p>
+
+<h2>参考</h2>
+<ol style="font-size:.88rem">
+<li id="src1">A. Karpathy, <a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">"The Unreasonable Effectiveness of Recurrent Neural Networks"</a>, 2015。引用标的是文中的小节名。</li>
+<li id="src2">PyTorch 文档：<a href="https://docs.pytorch.org/docs/stable/generated/torch.multinomial.html">torch.multinomial</a>、<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.softmax.html">F.softmax</a>。</li>
+</ol>
+
+<nav class="pager">
+<span><a href="0003-truncated-bptt.html">← 第 3 课：截断 BPTT</a> · <a href="../reference/rnn-cheatsheet.html">速查</a> · <a href="../reference/glossary.html">术语表</a></span>
+<a href="0005-inside-hidden-state.html">下一课：拆开隐藏状态 →</a>
+</nav>
+
+</main>
+<script src="../../assets/quiz.js"></script>
+<script src="../../assets/num.js"></script>
+<script src="../assets/temp-slider.js"></script>
+</body>
+</html>
