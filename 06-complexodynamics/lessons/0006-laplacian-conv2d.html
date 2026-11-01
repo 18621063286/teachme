@@ -220,7 +220,7 @@ print(diffusion_2d(coffee, steps=50, diffusion_rate=0.3)[-1].sum())   # 远大�
 <p><strong>主读：</strong>R. J. LeVeque，<em>Finite Difference Methods for Ordinary and Partial Differential Equations</em>，第 9 章（扩散方程）<sup class="cite"><a href="#src1">[1]</a></sup>。重点看显式格式的稳定性分析，和本课第 3 节对照：书里用 von Neumann 分析推出的条件，与凸组合论证给出的结论是同一个。</p>
 <p><strong>选读：</strong>Aaronson、Carroll、Ouellette 的咖啡自动机论文<sup class="cite"><a href="#src5">[5]</a></sup>。他们模拟的是另一种模型，不是本课的连续浓度扩散。第 7 课会对比两者，并在那里复现「先升后降」。全文：<a href="https://arxiv.org/abs/1405.6903">arXiv:1405.6903</a>。</p>
 
-<p class="ask box plain">有不清楚的地方，直接在终端问我。比如「为什么 Lu 不除以 h²」，或者「F.pad 的元组顺序记不住」。做完练习 C 后告诉我第三个 print 的数字。第 7 课会用这里的扩散，加上粗粒化和压缩长度，复现「先升后降」。</p>
+<p class="ask box plain">有不清楚的地方，可以问你的 AI 助手。比如「为什么 Lu 不除以 h²」，或者「F.pad 的元组顺序记不住」。第 7 课会用这里的扩散，加上粗粒化和压缩长度，复现「先升后降」。</p>
 
 <h2>参考</h2>
 <ol style="font-size:.88rem">
