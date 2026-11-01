@@ -158,3 +158,39 @@ nav.pager { display: flex; justify-content: space-between; gap: 1rem; font-famil
   h2 { break-after: avoid; } pre, table, .exercise, .box { break-inside: avoid; }
   a { color: inherit; }
 }
+
+/* 填空题（assets/num.js） */
+.num { margin: .5rem 0 1rem; }
+
+/* RNN 逐步演示（01-char-rnn/assets/rnn-demo.js） */
+.rnn-demo { margin: 1.2rem 0; overflow-x: auto; }
+.rnn-demo table { margin: .6rem 0; width: 100%; min-width: 28rem; }
+.rnn-demo td { vertical-align: middle; }
+.rnn-demo .vec { display: inline-flex; gap: 2px; }
+.rnn-demo .vec span { width: 2.7rem; padding: .1rem 0; font-family: var(--mono); font-size: .74rem; text-align: center; border-radius: 2px; color: var(--ink); }
+.rnn-demo .bars { display: grid; grid-template-columns: 1.1rem 5rem 2.6rem; gap: 0 .3rem; align-items: center; font-family: var(--mono); font-size: .72rem; line-height: 1.3; text-align: left; }
+.rnn-demo .bar { height: .55rem; background: var(--muted); min-width: 1px; }
+.rnn-demo .hit { color: var(--ok); font-weight: 600; }
+.rnn-demo .hit-bar { background: var(--ok); }
+.rnn-demo label { font-family: var(--sans); font-size: .88rem; margin-left: .4rem; white-space: nowrap; }
+.rnn-demo .msg { font-family: var(--sans); font-size: .9rem; margin: .4rem 0 0; min-height: 3em; }
+
+/* 温度滑块（01-char-rnn/assets/temp-slider.js） */
+.temp-widget { margin: 1.2rem 0; font-family: var(--sans); font-size: .9rem; }
+.temp-widget .bars { display: grid; grid-template-columns: 1.2rem 1fr 3.2rem; gap: .25rem .5rem; align-items: center; max-width: 30rem; margin: .6rem 0; font-family: var(--mono); font-size: .8rem; }
+.temp-widget .bar { height: .8rem; background: var(--accent); min-width: 1px; }
+.temp-widget .h-slider { display: block; }
+
+/* 损失曲线图（01-char-rnn/assets/loss-chart.js） */
+.loss-chart { margin: 1.2rem 0; }
+.loss-chart svg { display: block; width: 100%; height: auto; }
+.loss-chart .axis { stroke: var(--muted); stroke-width: 1; }
+.loss-chart .grid { stroke: var(--rule); stroke-width: 1; }
+.loss-chart text { fill: var(--muted); font-family: var(--sans); font-size: 11px; }
+.loss-chart .line { fill: none; stroke-width: 2; }
+.loss-chart .raw { stroke: var(--ink); stroke-width: 1.2; }
+.loss-chart .nb { stroke: var(--accent); }
+.loss-chart .fx { stroke: #3f7cac; }
+.loss-chart .lab { font-size: 12px; font-weight: 600; }
+.loss-chart .ctl { margin-bottom: .5rem; }
+.loss-chart button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }

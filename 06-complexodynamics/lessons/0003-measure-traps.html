@@ -198,16 +198,16 @@ def compressed_len(row: torch.Tensor) -&gt; int:
 </div>
 
 <h2>延伸阅读</h2>
-<p><strong>主读：</strong>Aaronson, Carroll, Ouellette，<a href="https://arxiv.org/abs/1405.6903">"Quantifying the Rise and Fall of Complexity in Closed Systems: The Coffee Automaton"</a>（2014）第 2 节。读他们如何区分三种熵（Boltzmann、Shannon、Kolmogorov），以及为什么用 gzip 压缩长度估计<strong>熵</strong>。本地 PDF：<a href="../../../papers_pdf/07_coffee_automaton.pdf">papers_pdf/07_coffee_automaton.pdf</a>。</p>
+<p><strong>主读：</strong>Aaronson, Carroll, Ouellette，<a href="https://arxiv.org/abs/1405.6903">"Quantifying the Rise and Fall of Complexity in Closed Systems: The Coffee Automaton"</a>（2014）第 2 节。读他们如何区分三种熵（Boltzmann、Shannon、Kolmogorov），以及为什么用 gzip 压缩长度估计<strong>熵</strong>。</p>
 <p><strong>选读：</strong>Aaronson 博客原文最后两段<sup class="cite"><a href="#src1">[1]</a></sup>：他明确说复杂度在实验里只能用「gzip 压缩长度这类能算的东西」粗略代替。</p>
 
 <p class="ask box plain">有不清楚的地方，直接在终端问我。比如「为什么压缩长度能当熵用」，或者「np.packbits 的位序是怎样的」。做完练习 C 告诉我结果。第 4 课会正式定义 Kolmogorov 复杂度 K(x)，再讲 sophistication：一个对简单串和随机串都给低分的度量。</p>
 
 <h2>参考</h2>
 <ol style="font-size:.88rem">
-<li id="src1">Aaronson, <a href="https://scottaaronson.blog/?p=762">The First Law of Complexodynamics</a>, Shtetl-Optimized, 2011-09-23。本地：papers_pdf/06_complexodynamics.pdf。</li>
+<li id="src1">Aaronson, <a href="https://scottaaronson.blog/?p=762">The First Law of Complexodynamics</a>, Shtetl-Optimized, 2011-09-23。</li>
 <li id="src2">Aaronson, Carroll, Ouellette, <a href="https://arxiv.org/abs/1405.6903">The Coffee Automaton</a>, arXiv:1405.6903, 2014, 第 2 节：用压缩长度估计 K(x)，并把 K(x) 当作熵。</li>
-<li id="src3">Shen, Uspensky, Vereshchagin, <em>Kolmogorov Complexity and Algorithmic Randomness</em>, AMS, 2017, 导论 Theorem 5：长度为 n 的串中复杂度小于 n 的少于 2<sup>n</sup> 个。本地：papers_pdf/26_kolmogorov_complexity.pdf。</li>
+<li id="src3">Shen, Uspensky, Vereshchagin, <em>Kolmogorov Complexity and Algorithmic Randomness</em>, AMS, 2017, 导论 Theorem 5：长度为 n 的串中复杂度小于 n 的少于 2<sup>n</sup> 个。</li>
 </ol>
 
 <nav class="pager">
